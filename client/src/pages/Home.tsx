@@ -1,109 +1,27 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { HeroSection } from "@/components/HeroSection";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { ToolCard } from "@/components/ToolCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
-
-const mockTools = [
-  {
-    id: "1",
-    slug: "chatgpt",
-    name: "ChatGPT",
-    shortDescription: "Advanced AI assistant for conversations, writing, coding, and creative tasks",
-    category: "Content AI",
-    pricing: "Free / $20/mo",
-    websiteUrl: "https://chat.openai.com",
-    badge: "Featured",
-    rating: 4.8,
-  },
-  {
-    id: "2",
-    slug: "midjourney",
-    name: "Midjourney",
-    shortDescription: "Create stunning AI-generated artwork from text descriptions",
-    category: "Image AI",
-    pricing: "$10-$60/mo",
-    websiteUrl: "https://midjourney.com",
-    badge: "Trending",
-    rating: 4.9,
-  },
-  {
-    id: "3",
-    slug: "github-copilot",
-    name: "GitHub Copilot",
-    shortDescription: "AI-powered code completion and programming assistant",
-    category: "Code AI",
-    pricing: "$10/mo",
-    websiteUrl: "https://github.com/features/copilot",
-    badge: "Featured",
-    rating: 4.7,
-  },
-  {
-    id: "4",
-    slug: "runway-ml",
-    name: "Runway ML",
-    shortDescription: "AI-powered video editing and generation tools",
-    category: "Video AI",
-    pricing: "Free / $12-$76/mo",
-    websiteUrl: "https://runwayml.com",
-    badge: "New",
-    rating: 4.6,
-  },
-  {
-    id: "5",
-    slug: "jasper-ai",
-    name: "Jasper AI",
-    shortDescription: "AI writing assistant for marketing copy and content creation",
-    category: "Marketing AI",
-    pricing: "$39-$99/mo",
-    websiteUrl: "https://jasper.ai",
-    rating: 4.5,
-  },
-  {
-    id: "6",
-    slug: "dalle-3",
-    name: "DALL-E 3",
-    shortDescription: "Advanced AI image generation from OpenAI",
-    category: "Image AI",
-    pricing: "$20/mo (ChatGPT Plus)",
-    websiteUrl: "https://openai.com/dall-e-3",
-    badge: "Featured",
-    rating: 4.8,
-  },
-  {
-    id: "7",
-    slug: "tableau-ai",
-    name: "Tableau AI",
-    shortDescription: "AI-powered data analytics and visualization platform",
-    category: "Data AI",
-    pricing: "$70-$840/year",
-    websiteUrl: "https://tableau.com",
-    rating: 4.7,
-  },
-  {
-    id: "8",
-    slug: "elevenlabs",
-    name: "ElevenLabs",
-    shortDescription: "Realistic AI voice generation and text-to-speech",
-    category: "Voice AI",
-    pricing: "Free / $5-$330/mo",
-    websiteUrl: "https://elevenlabs.io",
-    badge: "Trending",
-    rating: 4.9,
-  },
-];
+import type { AiTool } from "@shared/schema";
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
-  const filteredTools = mockTools.filter((tool) => {
-    const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.shortDescription.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || 
-      tool.category.toLowerCase().includes(selectedCategory.toLowerCase());
-    return matchesSearch && matchesCategory;
+  const { data: tools = [], isLoading } = useQuery<AiTool[]>({
+    queryKey: ["/api/tools", searchQuery, selectedCategory],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      if (selectedCategory !== "all") params.append("category", selectedCategory);
+      
+      const response = await fetch(`/api/tools?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch tools");
+      return response.json();
+    },
   });
 
   return (
@@ -116,7 +34,14 @@ export default function Home() {
             </div>
             <span className="font-bold text-xl">AI Tools Directory</span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-4">
+            <Link href="/admin">
+              <span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">
+                Admin
+              </span>
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -136,29 +61,42 @@ export default function Home() {
               {selectedCategory === "all" ? "All AI Tools" : `${selectedCategory} Tools`}
             </h2>
             <span className="text-muted-foreground" data-testid="text-results-count">
-              {filteredTools.length} tools found
+              {isLoading ? "Loading..." : `${tools.length} tools found`}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredTools.map((tool) => (
-              <Link key={tool.id} href={`/tools/${tool.slug}`}>
-                <div>
-                  <ToolCard
-                    {...tool}
-                    onViewDetails={() => {}}
-                  />
-                </div>
-              </Link>
-            ))}
-          </div>
-
-          {filteredTools.length === 0 && (
-            <div className="text-center py-16">
-              <p className="text-muted-foreground text-lg">
-                No tools found. Try adjusting your search or filters.
-              </p>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div
+                  key={i}
+                  className="h-64 bg-card border border-card-border rounded-lg animate-pulse"
+                />
+              ))}
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {tools.map((tool) => (
+                  <Link key={tool.id} href={`/tools/${tool.slug}`}>
+                    <div>
+                      <ToolCard
+                        {...tool}
+                        onViewDetails={() => {}}
+                      />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              {tools.length === 0 && (
+                <div className="text-center py-16">
+                  <p className="text-muted-foreground text-lg">
+                    No tools found. Try adjusting your search or filters.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>
