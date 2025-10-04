@@ -11,8 +11,8 @@ interface ToolCardProps {
   category: string;
   pricing: string;
   websiteUrl: string;
-  badge?: string;
-  rating?: number;
+  badge?: string | null;
+  rating?: number | null;
   onViewDetails: (id: string) => void;
 }
 
