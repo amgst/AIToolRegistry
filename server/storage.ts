@@ -1,38 +1,77 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { aiTools, type AiTool, type InsertAiTool } from "@shared/schema";
+import { db } from "./db";
+import { eq, ilike, or } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getAllTools(): Promise<AiTool[]>;
+  getToolById(id: string): Promise<AiTool | undefined>;
+  getToolBySlug(slug: string): Promise<AiTool | undefined>;
+  searchTools(query: string): Promise<AiTool[]>;
+  getToolsByCategory(category: string): Promise<AiTool[]>;
+  createTool(tool: InsertAiTool): Promise<AiTool>;
+  updateTool(id: string, tool: Partial<InsertAiTool>): Promise<AiTool | undefined>;
+  deleteTool(id: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getAllTools(): Promise<AiTool[]> {
+    return await db.select().from(aiTools);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getToolById(id: string): Promise<AiTool | undefined> {
+    const [tool] = await db.select().from(aiTools).where(eq(aiTools.id, id));
+    return tool || undefined;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getToolBySlug(slug: string): Promise<AiTool | undefined> {
+    const [tool] = await db.select().from(aiTools).where(eq(aiTools.slug, slug));
+    return tool || undefined;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async searchTools(query: string): Promise<AiTool[]> {
+    return await db
+      .select()
+      .from(aiTools)
+      .where(
+        or(
+          ilike(aiTools.name, `%${query}%`),
+          ilike(aiTools.shortDescription, `%${query}%`),
+          ilike(aiTools.description, `%${query}%`)
+        )
+      );
+  }
+
+  async getToolsByCategory(category: string): Promise<AiTool[]> {
+    return await db
+      .select()
+      .from(aiTools)
+      .where(ilike(aiTools.category, `%${category}%`));
+  }
+
+  async createTool(insertTool: InsertAiTool): Promise<AiTool> {
+    const [tool] = await db
+      .insert(aiTools)
+      .values(insertTool)
+      .returning();
+    return tool;
+  }
+
+  async updateTool(id: string, updateData: Partial<InsertAiTool>): Promise<AiTool | undefined> {
+    const [tool] = await db
+      .update(aiTools)
+      .set(updateData)
+      .where(eq(aiTools.id, id))
+      .returning();
+    return tool || undefined;
+  }
+
+  async deleteTool(id: string): Promise<boolean> {
+    const result = await db
+      .delete(aiTools)
+      .where(eq(aiTools.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export const aiTools = pgTable("ai_tools", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   description: text("description").notNull(),
   shortDescription: text("short_description").notNull(),
