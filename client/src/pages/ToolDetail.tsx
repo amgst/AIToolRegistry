@@ -1,15 +1,17 @@
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Check, Star } from "lucide-react";
+import { ArrowLeft, ExternalLink, Check, Star, Copy, Share2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useToast } from "@/hooks/use-toast";
 import type { AiTool } from "@shared/schema";
 
 export default function ToolDetail() {
   const [, params] = useRoute("/tools/:slug");
+  const { toast } = useToast();
   
   const { data: tool, isLoading } = useQuery<AiTool>({
     queryKey: ["/api/tools", params?.slug],
@@ -60,6 +62,32 @@ export default function ToolDetail() {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  // Derived info for richer UI
+  const descriptionWordCount = (tool.description || "").trim().split(/\s+/).filter(Boolean).length;
+  const readingTimeMin = Math.max(1, Math.round(descriptionWordCount / 200));
+  let websiteDomain = "";
+  try {
+    websiteDomain = new URL(tool.websiteUrl).hostname;
+  } catch {
+    websiteDomain = tool.websiteUrl;
+  }
+  const featuresCount = tool.features?.length || 0;
+  const tagsCount = tool.tags?.length || 0;
+
+  const copyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: `${label} copied`, description: value });
+    } catch (err) {
+      toast({ title: `Failed to copy ${label}`, description: String(err), variant: "destructive" });
+    }
+  };
+
+  const sharePage = async () => {
+    const url = window.location.href;
+    await copyToClipboard(url, "Page URL");
+  };
 
   return (
     <div className="min-h-screen">
@@ -123,6 +151,13 @@ export default function ToolDetail() {
                           <span className="text-muted-foreground text-sm">/5.0</span>
                         </div>
                       )}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Globe className="h-4 w-4" />
+                        <span>{websiteDomain}</span>
+                        <Button variant="ghost" size="sm" onClick={() => copyToClipboard(tool.websiteUrl, "Website URL")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -133,6 +168,13 @@ export default function ToolDetail() {
                     <p className="text-muted-foreground leading-relaxed text-lg">
                       {tool.description}
                     </p>
+                    <div className="mt-3 text-sm text-muted-foreground flex flex-wrap gap-4">
+                      <span>~{descriptionWordCount} words</span>
+                      <span>~{readingTimeMin} min read</span>
+                      <span>Features: {featuresCount}</span>
+                      <span>Tags: {tagsCount}</span>
+                      <span>Slug: <code className="text-xs">{tool.slug}</code> <Button variant="ghost" size="sm" onClick={() => copyToClipboard(tool.slug, "Slug")}><Copy className="h-3 w-3" /></Button></span>
+                    </div>
                   </div>
 
                   {tool.features && tool.features.length > 0 && (
@@ -206,14 +248,53 @@ export default function ToolDetail() {
                   </div>
                 )}
 
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={() => window.open(tool.websiteUrl, "_blank")}
-                  data-testid="button-visit-website"
-                >
-                  Visit Website
-                  <ExternalLink className="ml-2 h-5 w-5" />
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Website</h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      <span>{websiteDomain}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => copyToClipboard(tool.websiteUrl, "Website URL")}>
+                        <Copy className="h-4 w-4 mr-1" /> Copy
+                      </Button>
+                      <Button variant="default" size="sm" onClick={() => window.open(tool.websiteUrl, "_blank")} data-testid="button-visit-website">
+                        Visit <ExternalLink className="ml-1 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Tool Info</h3>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-between">
+                      <span>Slug</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs">{tool.slug}</code>
+                        <Button variant="ghost" size="sm" onClick={() => copyToClipboard(tool.slug, "Slug")}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between"><span>Features</span><span className="font-medium">{featuresCount}</span></div>
+                    <div className="flex items-center justify-between"><span>Tags</span><span className="font-medium">{tagsCount}</span></div>
+                    {tool.badge && (
+                      <div className="flex items-center justify-between"><span>Status</span><Badge variant="secondary">{tool.badge}</Badge></div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button className="w-full" size="lg" onClick={() => window.open(tool.websiteUrl, "_blank")} data-testid="button-visit-website">
+                    Visit Website
+                    <ExternalLink className="ml-2 h-5 w-5" />
+                  </Button>
+                </div>
+
+                <Button variant="outline" className="w-full" onClick={sharePage}>
+                  <Share2 className="h-4 w-4 mr-2" /> Share Tool Page
                 </Button>
               </CardContent>
             </Card>

@@ -18,7 +18,9 @@ export default function Home() {
       if (searchQuery) params.append("search", searchQuery);
       if (selectedCategory !== "all") params.append("category", selectedCategory);
       
-      const response = await fetch(`/api/tools?${params}`);
+      const qs = params.toString();
+      const url = qs ? `/api/tools?${qs}` : "/api/tools";
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch tools");
       return response.json();
     },

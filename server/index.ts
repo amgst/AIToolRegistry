@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import cron from "node-cron";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
@@ -61,11 +62,44 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
+
+  // reusePort is not supported on Windows; enable it only on non-Windows platforms
+  const listenOptions: any = {
     port,
     host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+    // Only set reusePort when supported
+    ...(process.platform !== "win32" ? { reusePort: true } : {}),
+  };
+
+  server.listen(listenOptions, () => {
+    // Log the full preview URL for tooling to detect easily
+    log(`serving on http://localhost:${port}/`);
+
+    // Schedule a daily auto-import job at 03:00 UTC
+    const sources = [
+      "https://www.aitoolnet.com/text-to-speech",
+      "https://www.aitoolnet.com/copywriting",
+      "https://www.aitoolnet.com/image-generator",
+    ];
+
+    cron.schedule(
+      "0 3 * * *",
+      async () => {
+        try {
+          for (const src of sources) {
+            const resp = await fetch(`http://localhost:${port}/api/ingest/aitoolnet`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ url: src, limit: 25 }),
+            });
+            const json = await resp.json().catch(() => ({}));
+            log(`auto-import (${src}) => ${resp.status} :: ${JSON.stringify(json)}`);
+          }
+        } catch (e) {
+          console.error("Auto-import job failed:", e);
+        }
+      },
+      { timezone: "UTC" }
+    );
   });
 })();

@@ -23,6 +23,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { AiTool, InsertAiTool } from "@shared/schema";
 
 const categories = [
@@ -37,14 +38,36 @@ const categories = [
 
 const badges = ["Featured", "New", "Trending"];
 
+// Define type for scraped tool items
+type ScrapedTool = {
+  name: string;
+  slug: string;
+  shortDescription?: string | null;
+  description?: string | null;
+  category?: string | null;
+  pricing?: string | null;
+  websiteUrl?: string | null;
+  features?: string[];
+  tags?: string[];
+  badge?: string | null;
+  rating?: number | null;
+  sourceDetailUrl?: string | null;
+};
+
 export default function Admin() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<AiTool | null>(null);
   const { toast } = useToast();
 
-  const { data: tools = [], isLoading } = useQuery<AiTool[]>({
-    queryKey: ["/api/tools"],
-  });
+  // Scrape & Import state
+  const [scrapeUrl, setScrapeUrl] = useState<string>("https://www.aitoolnet.com/");
+  const [scrapeLimit, setScrapeLimit] = useState<number>(10);
+  const [scrapedItems, setScrapedItems] = useState<ScrapedTool[]>([]);
+  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
+
+  // Fetch tools for Admin list
+  const { data: toolsData, isLoading } = useQuery<AiTool[]>({ queryKey: ["/api/tools"] });
+  const tools = toolsData ?? [];
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertAiTool) => {
@@ -102,6 +125,71 @@ export default function Admin() {
       });
     },
   });
+
+  const scrapeMutation = useMutation({
+    mutationFn: async ({ url, limit }: { url: string; limit: number }) => {
+      const res = await apiRequest("POST", "/api/scrape/aitoolnet", { url, limit });
+      return res.json() as Promise<{ count: number; items: ScrapedTool[] }>;
+    },
+    onSuccess: (data) => {
+      setScrapedItems(data.items ?? []);
+      setSelectedSlugs(new Set());
+      toast({ title: "Scrape complete", description: `Found ${data.count} items` });
+    },
+    onError: (error: any) => {
+      const message = (error instanceof Error ? error.message : String(error)) || "Failed to scrape";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const toggleSelect = (slug: string) => {
+    setSelectedSlugs((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) {
+        next.delete(slug);
+      } else {
+        next.add(slug);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = (checked: boolean) => {
+    setSelectedSlugs(checked ? new Set(scrapedItems.map((i) => i.slug)) : new Set());
+  };
+
+  const importSelected = async () => {
+    const toImport = scrapedItems.filter((i) => selectedSlugs.has(i.slug) && !!i.websiteUrl);
+    let imported = 0;
+    let skipped = 0;
+
+    for (const item of toImport) {
+      const payload: InsertAiTool = {
+        slug: item.slug,
+        name: item.name,
+        description: item.description ?? item.name,
+        shortDescription: item.shortDescription ?? item.name,
+        category: item.category ?? "Content AI",
+        pricing: item.pricing ?? "Unknown",
+        websiteUrl: item.websiteUrl!,
+        features: item.features ?? [],
+        tags: item.tags ?? [],
+        badge: item.badge ?? null,
+        rating: item.rating ?? null,
+      };
+
+      try {
+        await apiRequest("POST", "/api/tools", payload);
+        imported++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/tools"] });
+    toast({ title: "Import complete", description: `Imported ${imported}, skipped ${skipped}` });
+    setSelectedSlugs(new Set());
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -223,6 +311,106 @@ export default function Admin() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Scrape & Import Section */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Scrape & Import</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-4 mb-4">
+              <div className="flex-1 min-w-[280px]">
+                <Label htmlFor="scrapeUrl">Source URL</Label>
+                <Input
+                  id="scrapeUrl"
+                  value={scrapeUrl}
+                  onChange={(e) => setScrapeUrl(e.target.value)}
+                  placeholder="https://www.aitoolnet.com/"
+                />
+              </div>
+              <div>
+                <Label htmlFor="scrapeLimit">Limit</Label>
+                <Input
+                  id="scrapeLimit"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={scrapeLimit}
+                  onChange={(e) => setScrapeLimit(parseInt(e.target.value || "10", 10))}
+                />
+              </div>
+              <Button
+                onClick={() => scrapeMutation.mutate({ url: scrapeUrl, limit: scrapeLimit })}
+                disabled={scrapeMutation.isPending}
+                data-testid="button-run-scrape"
+              >
+                {scrapeMutation.isPending ? "Scraping..." : "Run Scrape"}
+              </Button>
+              {scrapedItems.length > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={importSelected}
+                  disabled={selectedSlugs.size === 0}
+                  data-testid="button-import-selected"
+                >
+                  Import Selected ({selectedSlugs.size})
+                </Button>
+              )}
+            </div>
+
+            {scrapedItems.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No scraped items yet. Run a scrape to see results here.</div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedSlugs.size === scrapedItems.length}
+                    onCheckedChange={(checked: boolean) => selectAll(!!checked)}
+                  />
+                  <span className="text-sm">Select all</span>
+                </div>
+                <div className="divide-y rounded border">
+                  {scrapedItems.map((item) => (
+                    <div key={item.slug} className="p-3 flex items-start gap-3">
+                      <Checkbox
+                        checked={selectedSlugs.has(item.slug)}
+                        onCheckedChange={() => toggleSelect(item.slug)}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold">{item.name}</h4>
+                          {item.websiteUrl && (
+                            <a
+                              href={item.websiteUrl}
+                              className="text-sm text-primary hover:underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Website
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {(item.shortDescription || item.description || "").slice(0, 200)}
+                        </p>
+                        {item.sourceDetailUrl && (
+                          <a
+                            href={item.sourceDetailUrl}
+                            className="text-xs text-muted-foreground hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Source: {item.sourceDetailUrl}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
@@ -355,12 +543,12 @@ export default function Admin() {
 
             <div>
               <Label htmlFor="badge">Badge (optional)</Label>
-              <Select name="badge" defaultValue={editingTool?.badge || ""}>
+              <Select name="badge" defaultValue={editingTool?.badge ?? undefined}>
                 <SelectTrigger data-testid="select-badge">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  {/* Removed empty string value option to satisfy SelectItem requirement */}
                   {badges.map((badge) => (
                     <SelectItem key={badge} value={badge}>
                       {badge}
