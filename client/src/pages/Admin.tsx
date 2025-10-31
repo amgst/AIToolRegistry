@@ -194,25 +194,37 @@ export default function Admin() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
-    const data = {
-      slug: formData.get("slug") as string,
-      name: formData.get("name") as string,
-      shortDescription: formData.get("shortDescription") as string,
-      description: formData.get("description") as string,
-      category: formData.get("category") as string,
-      pricing: formData.get("pricing") as string,
-      websiteUrl: formData.get("websiteUrl") as string,
-      features: (formData.get("features") as string)
-        .split("\n")
-        .map(f => f.trim())
-        .filter(Boolean),
-      tags: (formData.get("tags") as string)
-        .split(",")
-        .map(t => t.trim())
-        .filter(Boolean),
-      badge: formData.get("badge") as string || null,
-      rating: formData.get("rating") ? parseInt(formData.get("rating") as string) : null,
+    const getStr = (key: string) => {
+      const v = formData.get(key);
+      return typeof v === "string" ? v.trim() : undefined;
+    };
+
+    const featuresRaw = getStr("features");
+    const tagsRaw = getStr("tags");
+
+    const data: Partial<InsertAiTool> = {
+      // Slug optional; server will slugify from name when absent
+      slug: getStr("slug"),
+      name: getStr("name") || "", // only required field
+      shortDescription: getStr("shortDescription"),
+      description: getStr("description"),
+      category: getStr("category"),
+      pricing: getStr("pricing"),
+      websiteUrl: getStr("websiteUrl"),
+      features: featuresRaw
+        ? featuresRaw
+            .split("\n")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
+      tags: tagsRaw
+        ? tagsRaw
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
+      badge: getStr("badge") || null,
+      rating: getStr("rating") ? parseInt(getStr("rating") as string, 10) : null,
     };
 
     if (editingTool) {
@@ -427,13 +439,12 @@ export default function Admin() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="slug">Slug (URL-friendly)</Label>
+              <Label htmlFor="slug">Slug (optional, URL-friendly)</Label>
               <Input
                 id="slug"
                 name="slug"
                 defaultValue={editingTool?.slug}
                 placeholder="e.g., chatgpt"
-                required
                 data-testid="input-slug"
               />
             </div>
@@ -457,7 +468,6 @@ export default function Admin() {
                 name="shortDescription"
                 defaultValue={editingTool?.shortDescription}
                 placeholder="Brief one-line description"
-                required
                 data-testid="input-short-description"
               />
             </div>
@@ -470,14 +480,13 @@ export default function Admin() {
                 defaultValue={editingTool?.description}
                 placeholder="Detailed description"
                 rows={4}
-                required
                 data-testid="textarea-description"
               />
             </div>
 
             <div>
               <Label htmlFor="category">Category</Label>
-              <Select name="category" defaultValue={editingTool?.category || categories[0]} required>
+              <Select name="category" defaultValue={editingTool?.category}>
                 <SelectTrigger data-testid="select-category">
                   <SelectValue />
                 </SelectTrigger>
@@ -498,7 +507,6 @@ export default function Admin() {
                 name="pricing"
                 defaultValue={editingTool?.pricing}
                 placeholder="e.g., Free / $20/mo"
-                required
                 data-testid="input-pricing"
               />
             </div>
@@ -511,7 +519,6 @@ export default function Admin() {
                 type="url"
                 defaultValue={editingTool?.websiteUrl}
                 placeholder="https://example.com"
-                required
                 data-testid="input-website-url"
               />
             </div>
@@ -524,7 +531,6 @@ export default function Admin() {
                 defaultValue={editingTool?.features?.join("\n")}
                 placeholder="Feature 1&#10;Feature 2&#10;Feature 3"
                 rows={4}
-                required
                 data-testid="textarea-features"
               />
             </div>
@@ -536,7 +542,6 @@ export default function Admin() {
                 name="tags"
                 defaultValue={editingTool?.tags?.join(", ")}
                 placeholder="AI, Chatbot, GPT"
-                required
                 data-testid="input-tags"
               />
             </div>

@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,9 @@ export function ToolDetailModal({ isOpen, onClose, tool }: ToolDetailModalProps)
                   <DialogTitle className="text-3xl mb-2" data-testid="text-modal-title">
                     {tool.name}
                   </DialogTitle>
+                  <DialogDescription>
+                    Detailed information and actions for {tool.name}.
+                  </DialogDescription>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="outline">{tool.category}</Badge>
                     <Badge variant="secondary">{tool.pricing}</Badge>

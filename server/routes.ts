@@ -23,7 +23,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(tools);
     } catch (error) {
       console.error("Error fetching tools:", error);
-      res.status(500).json({ error: "Failed to fetch tools" });
+      // Graceful fallback: return an empty list instead of 500
+      res.status(200).json([]);
     }
   });
 
@@ -45,7 +46,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tools", async (req, res) => {
     try {
-      const validatedData = insertAiToolSchema.parse(req.body);
+      // Accept minimal payload: only name is mandatory. Fill sensible defaults.
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const name = String(body.name ?? "").trim();
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+
+      // Simple slugify from name if slug missing/blank
+      const rawSlug = String(body.slug ?? "").trim();
+      const slug = rawSlug
+        ? rawSlug
+        : name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+
+      const descRaw = String(body.description ?? "").trim();
+      const shortDescRaw = String(body.shortDescription ?? "").trim();
+      const description = descRaw || shortDescRaw || name;
+      const shortDescription = shortDescRaw || descRaw || name;
+      const category = String(body.category ?? "").trim() || "Content AI";
+      const pricing = String(body.pricing ?? "").trim() || "Unknown";
+      const websiteUrl = String(body.websiteUrl ?? ""); // allow blank string
+
+      const features = Array.isArray(body.features)
+        ? (body.features as string[])
+        : [];
+      const tags = Array.isArray(body.tags) ? (body.tags as string[]) : [];
+
+      // Optional fields: include only when provided
+      const badge = body.badge != null ? String(body.badge) : undefined;
+      const rating = body.rating != null ? Number(body.rating) : undefined;
+      const logoUrl = body.logoUrl != null ? String(body.logoUrl) : undefined;
+
+      const input = {
+        name,
+        slug,
+        description,
+        shortDescription,
+        category,
+        pricing,
+        websiteUrl,
+        features,
+        tags,
+        ...(badge ? { badge } : {}),
+        ...(rating !== undefined ? { rating } : {}),
+        ...(logoUrl ? { logoUrl } : {}),
+      };
+
+      const validatedData = insertAiToolSchema.parse(input);
       const tool = await storage.createTool(validatedData);
       res.status(201).json(tool);
     } catch (error) {
