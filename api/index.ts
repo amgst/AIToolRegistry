@@ -1,7 +1,7 @@
 // Vercel serverless function entry point for Express app
 // This exports the Express app as a serverless function handler
 import express, { type Express } from "express";
-import { registerRoutes } from "../server/routes";
+// Don't import routes at top level - import lazily to avoid module load issues
 import path from "path";
 import fs from "fs";
 
@@ -44,17 +44,6 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   const message = err.message || "Internal Server Error";
   res.status(status).json({ message });
 });
-
-// Serve static files in production
-if (process.env.NODE_ENV === "production") {
-  const distPath = path.resolve(process.cwd(), "dist/public");
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.use("*", (_req, res) => {
-      res.sendFile(path.resolve(distPath, "index.html"));
-    });
-  }
-}
 
 // Auto-create tables endpoint (one-time setup)
 app.get("/api/health/create-tables", async (req, res) => {
@@ -234,13 +223,28 @@ async function initialize() {
   
   initPromise = (async () => {
     try {
+      // Dynamically import routes to avoid module load issues
+      const { registerRoutes } = await import("../server/routes");
       await registerRoutes(app);
+      
+      // Add static file serving in production (after routes)
+      if (process.env.NODE_ENV === "production") {
+        const distPath = path.resolve(process.cwd(), "dist/public");
+        if (fs.existsSync(distPath)) {
+          app.use(express.static(distPath));
+          app.use("*", (_req, res) => {
+            res.sendFile(path.resolve(distPath, "index.html"));
+          });
+        }
+      }
+      
       isInitialized = true;
       console.log("✅ Routes initialized successfully");
     } catch (error) {
       console.error("❌ Error initializing routes:", error);
       isInitialized = true; // Mark as initialized to prevent loops
-      // Don't throw - let error handler catch it
+      // Re-throw so middleware can handle it
+      throw error;
     }
   })();
   
@@ -267,6 +271,6 @@ app.use(async (req, res, next) => {
 });
 
 // Vercel serverless function handler - export Express app directly
-// Vercel will automatically handle Express apps
+// Vercel automatically handles Express apps, and our middleware will initialize routes
 export default app;
 
