@@ -1,6 +1,6 @@
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Check, Star, Copy, Share2, Globe } from "lucide-react";
+import { ArrowLeft, ExternalLink, Check, Star, Copy, Share2, Globe, Calendar, Building2, Book, Link as LinkIcon, Image as ImageIcon, Twitter, Github, Linkedin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -203,6 +203,46 @@ export default function ToolDetail() {
                       </div>
                     </div>
                   )}
+
+                  {tool.useCases && tool.useCases.length > 0 && (
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-4">Use Cases</h2>
+                      <ul className="space-y-2">
+                        {tool.useCases.map((useCase, index) => (
+                          <li key={index} className="flex items-start gap-2 text-muted-foreground">
+                            <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                            <span>{useCase}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {tool.screenshots && tool.screenshots.length > 0 && (
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-4">Screenshots</h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {tool.screenshots.map((screenshot, index) => (
+                          <a
+                            key={index}
+                            href={screenshot}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                          >
+                            <img
+                              src={screenshot}
+                              alt={`${tool.name} screenshot ${index + 1}`}
+                              className="w-full h-auto"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -216,7 +256,111 @@ export default function ToolDetail() {
                     Pricing
                   </h3>
                   <p className="text-2xl font-bold">{tool.pricing}</p>
+                  {tool.pricingDetails?.pricingModel && (
+                    <Badge variant="outline" className="mt-2">
+                      {tool.pricingDetails.pricingModel}
+                    </Badge>
+                  )}
                 </div>
+
+                {tool.pricingDetails && (
+                  <div className="space-y-4">
+                    {tool.pricingDetails.freeTrial && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-1">Free Trial</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {typeof tool.pricingDetails.freeTrial === "string"
+                            ? tool.pricingDetails.freeTrial
+                            : "Available"}
+                        </p>
+                      </div>
+                    )}
+
+                    {tool.pricingDetails.freeTier && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Free Tier</h4>
+                        {tool.pricingDetails.freeTier.description && (
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {tool.pricingDetails.freeTier.description}
+                          </p>
+                        )}
+                        {tool.pricingDetails.freeTier.limits && tool.pricingDetails.freeTier.limits.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {tool.pricingDetails.freeTier.limits.map((limit, idx) => (
+                              <div key={idx} className="text-xs text-muted-foreground flex items-center gap-1">
+                                <span>•</span>
+                                <span>{limit}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {tool.pricingDetails.freeTier.features && tool.pricingDetails.freeTier.features.length > 0 && (
+                          <div className="space-y-1">
+                            {tool.pricingDetails.freeTier.features.map((feature, idx) => (
+                              <div key={idx} className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Check className="h-3 w-3 text-primary" />
+                                <span>{feature}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {tool.pricingDetails.plans && tool.pricingDetails.plans.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-3">Plans</h4>
+                        <div className="space-y-3">
+                          {tool.pricingDetails.plans.map((plan, idx) => (
+                            <div
+                              key={idx}
+                              className={`p-3 border rounded-lg ${
+                                plan.popular ? "border-primary bg-primary/5" : ""
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold">{plan.name}</span>
+                                    {plan.popular && (
+                                      <Badge variant="default" className="text-xs">Popular</Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-lg font-bold mt-1">
+                                    {plan.currency && plan.currency !== "USD" && `${plan.currency} `}
+                                    {plan.price}
+                                    {plan.period && (
+                                      <span className="text-sm font-normal text-muted-foreground">
+                                        /{plan.period}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {plan.features && plan.features.length > 0 && (
+                                <div className="space-y-1 mt-2">
+                                  {plan.features.map((feature, fIdx) => (
+                                    <div key={fIdx} className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <Check className="h-3 w-3 text-primary" />
+                                      <span>{feature}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {tool.pricingDetails.notes && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-1">Notes</h4>
+                        <p className="text-xs text-muted-foreground">{tool.pricingDetails.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">
@@ -266,6 +410,84 @@ export default function ToolDetail() {
                   </div>
                 </div>
 
+                {tool.developer && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Developer</h3>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{tool.developer}</span>
+                    </div>
+                  </div>
+                )}
+
+                {tool.documentationUrl && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Documentation</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => window.open(tool.documentationUrl!, "_blank")}
+                    >
+                      <Book className="h-4 w-4 mr-2" />
+                      View Docs
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {tool.socialLinks && Object.keys(tool.socialLinks).length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Social Links</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {tool.socialLinks.twitter && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(tool.socialLinks!.twitter, "_blank")}
+                        >
+                          <Twitter className="h-4 w-4 mr-1" />
+                          Twitter
+                        </Button>
+                      )}
+                      {tool.socialLinks.github && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(tool.socialLinks!.github, "_blank")}
+                        >
+                          <Github className="h-4 w-4 mr-1" />
+                          GitHub
+                        </Button>
+                      )}
+                      {tool.socialLinks.linkedin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(tool.socialLinks!.linkedin, "_blank")}
+                        >
+                          <Linkedin className="h-4 w-4 mr-1" />
+                          LinkedIn
+                        </Button>
+                      )}
+                      {Object.entries(tool.socialLinks).map(([key, url]) => {
+                        if (key === "twitter" || key === "github" || key === "linkedin") return null;
+                        return (
+                          <Button
+                            key={key}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(url, "_blank")}
+                          >
+                            <LinkIcon className="h-4 w-4 mr-1" />
+                            {key}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground mb-2">Tool Info</h3>
                   <div className="space-y-2 text-sm text-muted-foreground">
@@ -280,6 +502,34 @@ export default function ToolDetail() {
                     </div>
                     <div className="flex items-center justify-between"><span>Features</span><span className="font-medium">{featuresCount}</span></div>
                     <div className="flex items-center justify-between"><span>Tags</span><span className="font-medium">{tagsCount}</span></div>
+                    {tool.launchDate && (
+                      <div className="flex items-center justify-between">
+                        <span>Launch Date</span>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(tool.launchDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    )}
+                    {tool.lastUpdated && (
+                      <div className="flex items-center justify-between">
+                        <span>Last Updated</span>
+                        <span className="text-xs">{new Date(tool.lastUpdated).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {tool.sourceDetailUrl && (
+                      <div className="flex items-center justify-between">
+                        <span>Source</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto p-1"
+                          onClick={() => window.open(tool.sourceDetailUrl!, "_blank")}
+                        >
+                          <LinkIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                     {tool.badge && (
                       <div className="flex items-center justify-between"><span>Status</span><Badge variant="secondary">{tool.badge}</Badge></div>
                     )}

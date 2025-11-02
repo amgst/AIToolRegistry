@@ -5,6 +5,8 @@ import { insertAiToolSchema } from "@shared/schema";
 import { z } from "zod";
 // Removed node-fetch import; using global fetch available in Node 18+
 import { load } from "cheerio";
+import { scraperManager } from "./scrapers/scraper-manager";
+import { sourcesStorage } from "./scrapers/sources-storage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tools", async (req, res) => {
@@ -79,6 +81,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const badge = body.badge != null ? String(body.badge) : undefined;
       const rating = body.rating != null ? Number(body.rating) : undefined;
       const logoUrl = body.logoUrl != null ? String(body.logoUrl) : undefined;
+      
+      // Extended optional fields
+      const sourceDetailUrl = body.sourceDetailUrl != null ? String(body.sourceDetailUrl).trim() : undefined;
+      const developer = body.developer != null ? String(body.developer).trim() : undefined;
+      const documentationUrl = body.documentationUrl != null ? String(body.documentationUrl).trim() : undefined;
+      const launchDate = body.launchDate != null ? String(body.launchDate).trim() : undefined;
+      
+      // JSON fields
+      const socialLinks = body.socialLinks != null && typeof body.socialLinks === "object"
+        ? body.socialLinks as Record<string, string>
+        : undefined;
+      const useCases = Array.isArray(body.useCases) ? (body.useCases as string[]) : undefined;
+      const screenshots = Array.isArray(body.screenshots) ? (body.screenshots as string[]) : undefined;
+      const pricingDetails = body.pricingDetails != null && typeof body.pricingDetails === "object"
+        ? body.pricingDetails
+        : undefined;
 
       const input = {
         name,
@@ -93,6 +111,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(badge ? { badge } : {}),
         ...(rating !== undefined ? { rating } : {}),
         ...(logoUrl ? { logoUrl } : {}),
+        ...(sourceDetailUrl ? { sourceDetailUrl } : {}),
+        ...(developer ? { developer } : {}),
+        ...(documentationUrl ? { documentationUrl } : {}),
+        ...(launchDate ? { launchDate } : {}),
+        ...(socialLinks ? { socialLinks } : {}),
+        ...(useCases ? { useCases } : {}),
+        ...(screenshots ? { screenshots } : {}),
+        ...(pricingDetails ? { pricingDetails } : {}),
       };
 
       const validatedData = insertAiToolSchema.parse(input);
@@ -195,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const $list = load(listHtml);
 
       // Heuristics to prefer tool detail slugs and skip site/navigation pages.
-      function isLikelyDetailPath(pathname: string): boolean {
+      const isLikelyDetailPath = (pathname: string): boolean => {
         const p = pathname.toLowerCase();
         const segments = p.split("/").filter(Boolean);
         // Many detail pages are single-segment slugs like "/murf-ai".
@@ -209,7 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (isSingleSlug) return true;
         if (segments[0] === "ai-tools" && segments.length >= 2) return true;
         return false;
-      }
+      };
 
       // Heuristic: collect internal links that look like tool detail pages
       const candidateHrefs = new Set<string>();
@@ -240,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const concurrency = 5;
       const results: any[] = [];
       let index = 0;
-      async function worker() {
+      const worker = async () => {
         while (index < candidates.length) {
           const current = candidates[index++];
           try {
@@ -384,6 +410,269 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to ingest aitoolnet" });
     }
   });
+
+  // New enhanced scraping endpoints
+  app.get("/api/scrapers", (_req, res) => {
+    res.json({
+      available: scraperManager.getAvailableScrapers(),
+    });
+  });
+
+  app.get("/api/scrapers/sources", (_req, res) => {
+    res.json(sourcesStorage.getAllSources());
+  });
+
+  app.post("/api/scrapers/sources", async (req, res) => {
+    try {
+      const body = req.body as {
+        name?: string;
+        type?: string;
+        url?: string;
+        enabled?: boolean;
+        schedule?: string;
+        limit?: number;
+        concurrency?: number;
+      };
+
+      if (!body.name || !body.type || !body.url) {
+        return res.status(400).json({
+          error: "Missing required fields: name, type, url",
+        });
+      }
+
+      const scraper = scraperManager.getScraper(body.type);
+      if (!scraper) {
+        return res.status(400).json({
+          error: `Unknown scraper type: ${body.type}. Available: ${scraperManager.getAvailableScrapers().join(", ")}`,
+        });
+      }
+
+      // For generic scraper, allow any URL
+      // For specific scrapers, validate URL matches expected domain
+      if (body.type !== "generic") {
+        // Optional: add domain validation for specific scrapers
+        // This is lenient to allow flexibility
+      }
+
+      const source = sourcesStorage.createSource({
+        name: body.name,
+        type: body.type,
+        url: body.url,
+        enabled: body.enabled !== false,
+        schedule: body.schedule,
+        limit: body.limit,
+        concurrency: body.concurrency,
+      });
+
+      res.status(201).json(source);
+    } catch (error) {
+      console.error("Error creating source:", error);
+      res.status(500).json({ error: "Failed to create source" });
+    }
+  });
+
+  app.patch("/api/scrapers/sources/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body as Partial<{
+        name: string;
+        url: string;
+        enabled: boolean;
+        schedule: string;
+        limit: number;
+        concurrency: number;
+      }>;
+
+      const updated = sourcesStorage.updateSource(id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Source not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating source:", error);
+      res.status(500).json({ error: "Failed to update source" });
+    }
+  });
+
+  app.delete("/api/scrapers/sources/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = sourcesStorage.deleteSource(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Source not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting source:", error);
+      res.status(500).json({ error: "Failed to delete source" });
+    }
+  });
+
+  app.post("/api/scrapers/scrape/:sourceId", async (req, res) => {
+    try {
+      const { sourceId } = req.params;
+      const source = sourcesStorage.getSource(sourceId);
+
+      if (!source) {
+        return res.status(404).json({ error: "Source not found" });
+      }
+
+      const result = await scraperManager.scrape(source);
+      res.json(result);
+    } catch (error) {
+      console.error("Error scraping:", error);
+      res.status(500).json({ error: "Failed to scrape", details: String(error) });
+    }
+  });
+
+  app.post("/api/scrapers/ingest/:sourceId", async (req, res) => {
+    try {
+      const { sourceId } = req.params;
+      const { dryRun = false, updateExisting = false } = req.body as { dryRun?: boolean; updateExisting?: boolean };
+      const source = sourcesStorage.getSource(sourceId);
+
+      if (!source) {
+        return res.status(404).json({ error: "Source not found" });
+      }
+
+      const scrapeResult = await scraperManager.scrape(source);
+      
+      if (!scrapeResult.success) {
+        return res.status(502).json({
+          error: "Scraping failed",
+          details: scrapeResult.errors,
+        });
+      }
+
+      let inserted = 0;
+      let updated = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      const processed: string[] = [];
+      const skippedItems: Array<{ slug: string; reason: string }> = [];
+
+      for (const item of scrapeResult.items) {
+        try {
+          const slug = String(item.slug || "").trim();
+          if (!slug || !item.name || !item.websiteUrl) {
+            skipped++;
+            skippedItems.push({
+              slug: slug || item.name || "unknown",
+              reason: "Missing required fields (slug, name, or websiteUrl)",
+            });
+            continue;
+          }
+
+          // Improved duplicate detection: check by both slug and website URL
+          const existing = await storage.findDuplicateTool(slug, item.websiteUrl);
+          
+          if (existing) {
+            // Determine why it's a duplicate for better reporting
+            const isSlugDuplicate = existing.slug === slug;
+            const duplicateReason = isSlugDuplicate 
+              ? "Duplicate slug (same tool name)" 
+              : "Duplicate website URL (same tool website)";
+            
+            if (updateExisting && !dryRun) {
+              // Update existing tool with new data
+              await storage.updateTool(existing.id, {
+                name: item.name!,
+                description: item.description || item.shortDescription || item.name!,
+                shortDescription: item.shortDescription || item.description || item.name!,
+                category: item.category || existing.category,
+                pricing: item.pricing || existing.pricing,
+                websiteUrl: item.websiteUrl,
+                logoUrl: item.logoUrl || existing.logoUrl,
+                features: Array.isArray(item.features) ? item.features : existing.features,
+                tags: Array.isArray(item.tags) ? item.tags : existing.tags,
+                badge: item.badge || existing.badge,
+                rating: item.rating ?? existing.rating,
+                sourceDetailUrl: item.sourceDetailUrl || existing.sourceDetailUrl,
+              });
+              updated++;
+              processed.push(slug);
+            } else {
+              skipped++;
+              skippedItems.push({
+                slug,
+                reason: duplicateReason,
+              });
+            }
+            continue;
+          }
+
+          if (!dryRun) {
+            await storage.createTool({
+              name: item.name!,
+              slug,
+              description: item.description || item.shortDescription || item.name!,
+              shortDescription: item.shortDescription || item.description || item.name!,
+              category: item.category || "Content AI",
+              pricing: item.pricing || "Unknown",
+              websiteUrl: item.websiteUrl,
+              logoUrl: item.logoUrl || undefined,
+              features: Array.isArray(item.features) ? item.features : [],
+              tags: Array.isArray(item.tags) ? item.tags : [],
+              badge: item.badge || undefined,
+              rating: item.rating || undefined,
+              sourceDetailUrl: item.sourceDetailUrl,
+            });
+          }
+          inserted++;
+          processed.push(slug);
+        } catch (e) {
+          skipped++;
+          const errorMsg = String((e as Error).message || e);
+          errors.push(errorMsg);
+          skippedItems.push({
+            slug: String(item.slug || item.name || "unknown"),
+            reason: `Error: ${errorMsg}`,
+          });
+        }
+      }
+
+      res.json({
+        scraped: scrapeResult.items.length,
+        inserted,
+        updated: updateExisting ? updated : undefined,
+        skipped,
+        dryRun,
+        processed,
+        skippedItems: skippedItems.length > 0 ? skippedItems : undefined,
+        errors: errors.length > 0 ? errors : undefined,
+        metadata: scrapeResult.metadata,
+      });
+    } catch (error) {
+      console.error("Error ingesting:", error);
+      res.status(500).json({ error: "Failed to ingest", details: String(error) });
+    }
+  });
+
+  app.post("/api/scrapers/scrape-all", async (req, res) => {
+    try {
+      const { enabledOnly = true } = req.body as { enabledOnly?: boolean };
+      const sources = enabledOnly 
+        ? sourcesStorage.getEnabledSources()
+        : sourcesStorage.getAllSources();
+
+      const results = await scraperManager.scrapeMultiple(sources);
+
+      const summary = {
+        total: sources.length,
+        successful: Array.from(results.values()).filter(r => r.success).length,
+        failed: Array.from(results.values()).filter(r => !r.success).length,
+        totalItems: Array.from(results.values()).reduce((sum, r) => sum + r.items.length, 0),
+        results: Object.fromEntries(results),
+      };
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Error scraping all:", error);
+      res.status(500).json({ error: "Failed to scrape all sources", details: String(error) });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

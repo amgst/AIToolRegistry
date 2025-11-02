@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import cron from "node-cron";
 import { setupVite, serveStatic, log } from "./vite";
+import { sourcesStorage } from "./scrapers/sources-storage";
 
 const app = express();
 app.use(express.json());
@@ -75,31 +76,55 @@ app.use((req, res, next) => {
     // Log the full preview URL for tooling to detect easily
     log(`serving on http://localhost:${port}/`);
 
-    // Schedule a daily auto-import job at 03:00 UTC
-    const sources = [
-      "https://www.aitoolnet.com/text-to-speech",
-      "https://www.aitoolnet.com/copywriting",
-      "https://www.aitoolnet.com/image-generator",
-    ];
+    // Schedule auto-import jobs for all enabled sources with schedules
+    const scheduledJobs = new Map<string, cron.ScheduledTask>();
 
-    cron.schedule(
-      "0 3 * * *",
-      async () => {
-        try {
-          for (const src of sources) {
-            const resp = await fetch(`http://localhost:${port}/api/ingest/aitoolnet`, {
+    function scheduleSource(source: { id: string; schedule?: string; enabled: boolean }) {
+      // Remove existing job if any
+      const existing = scheduledJobs.get(source.id);
+      if (existing) {
+        existing.stop();
+        scheduledJobs.delete(source.id);
+      }
+
+      // Only schedule if enabled and has a schedule
+      if (!source.enabled || !source.schedule) {
+        return;
+      }
+
+      // Validate cron expression
+      if (!cron.validate(source.schedule)) {
+        log(`Invalid cron schedule for source ${source.id}: ${source.schedule}`);
+        return;
+      }
+
+      const task = cron.schedule(
+        source.schedule,
+        async () => {
+          try {
+            log(`Auto-import job triggered for source ${source.id}`);
+            const resp = await fetch(`http://localhost:${port}/api/scrapers/ingest/${source.id}`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ url: src, limit: 25 }),
+              body: JSON.stringify({ dryRun: false }),
             });
             const json = await resp.json().catch(() => ({}));
-            log(`auto-import (${src}) => ${resp.status} :: ${JSON.stringify(json)}`);
+            log(`auto-import (${source.id}) => ${resp.status} :: ${JSON.stringify(json)}`);
+          } catch (e) {
+            console.error(`Auto-import job failed for source ${source.id}:`, e);
           }
-        } catch (e) {
-          console.error("Auto-import job failed:", e);
-        }
-      },
-      { timezone: "UTC" }
-    );
+        },
+        { timezone: "UTC" }
+      );
+
+      scheduledJobs.set(source.id, task);
+      log(`Scheduled auto-import for source ${source.id} with schedule: ${source.schedule}`);
+    }
+
+    // Schedule all initial sources
+    sourcesStorage.getAllSources().forEach(scheduleSource);
+
+    // TODO: Add API endpoint to re-schedule jobs when sources are updated
+    // For now, restarting the server will pick up new schedules
   });
 })();

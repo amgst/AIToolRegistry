@@ -23,6 +23,30 @@ interface ToolDetailModalProps {
     websiteUrl: string;
     features: string[];
     tags: string[];
+    developer?: string;
+    documentationUrl?: string;
+    launchDate?: string;
+    useCases?: string[];
+    screenshots?: string[];
+    socialLinks?: Record<string, string>;
+    pricingDetails?: {
+      pricingModel?: string;
+      freeTrial?: boolean | string;
+      freeTier?: {
+        description?: string;
+        limits?: string[];
+        features?: string[];
+      };
+      plans?: Array<{
+        name: string;
+        price: string;
+        period?: string;
+        currency?: string;
+        features?: string[];
+        popular?: boolean;
+      }>;
+      notes?: string;
+    };
   } | null;
 }
 
@@ -105,6 +129,56 @@ export function ToolDetailModal({ isOpen, onClose, tool }: ToolDetailModalProps)
                       </Badge>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {tool.pricingDetails && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Pricing Details</h3>
+                  {tool.pricingDetails.pricingModel && (
+                    <Badge variant="outline" className="mb-3">
+                      {tool.pricingDetails.pricingModel}
+                    </Badge>
+                  )}
+                  
+                  {tool.pricingDetails.freeTrial && (
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium mb-1">Free Trial</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {typeof tool.pricingDetails.freeTrial === "string"
+                          ? tool.pricingDetails.freeTrial
+                          : "Available"}
+                      </p>
+                    </div>
+                  )}
+
+                  {tool.pricingDetails.plans && tool.pricingDetails.plans.length > 0 && (
+                    <div className="space-y-2">
+                      {tool.pricingDetails.plans.map((plan, idx) => (
+                        <div key={idx} className="p-3 border rounded-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold">{plan.name}</span>
+                            {plan.popular && <Badge variant="default" className="text-xs">Popular</Badge>}
+                          </div>
+                          <p className="text-lg font-bold">
+                            {plan.currency && plan.currency !== "USD" && `${plan.currency} `}
+                            {plan.price}
+                            {plan.period && <span className="text-sm font-normal">/{plan.period}</span>}
+                          </p>
+                          {plan.features && plan.features.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {plan.features.map((feature, fIdx) => (
+                                <li key={fIdx} className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Check className="h-3 w-3 text-primary" />
+                                  <span>{feature}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

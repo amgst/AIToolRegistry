@@ -1,16 +1,13 @@
 import { defineConfig } from "drizzle-kit";
+import path from "path";
 
-const DATABASE_URL = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
-
-if (!DATABASE_URL) {
-  throw new Error("DATABASE_URL or NEON_DATABASE_URL must be set. Ensure the database is provisioned and the connection string is configured.");
-}
+const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "database.sqlite");
 
 export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
-  dialect: "postgresql",
+  dialect: "sqlite",
   dbCredentials: {
-    url: DATABASE_URL,
+    url: dbPath,
   },
 });
