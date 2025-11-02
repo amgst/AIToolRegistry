@@ -56,6 +56,50 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
+// Health check endpoint for debugging
+app.get("/api/health", async (req, res) => {
+  try {
+    const { db } = await import("../server/db");
+    const { aiTools } = await import("@shared/schema");
+    const tools = await db.select().from(aiTools).limit(1);
+    
+    const dbType = process.env.DATABASE_URL || process.env.POSTGRES_URL 
+      ? "PostgreSQL" 
+      : "SQLite";
+    
+    return res.json({
+      status: "ok",
+      database: {
+        type: dbType,
+        connected: true,
+        hasData: tools.length > 0,
+      },
+      issues: [
+        dbType === "SQLite" ? "⚠️ SQLite doesn't work on Vercel - need PostgreSQL" : null,
+        tools.length === 0 ? "⚠️ No tools in database - need to seed data" : null,
+      ].filter(Boolean),
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        hasPostgresUrl: !!process.env.POSTGRES_URL,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+      database: {
+        connected: false,
+      },
+      issues: [
+        "❌ Database connection failed",
+        "SQLite file may not exist or be accessible on Vercel",
+        "PostgreSQL connection string may be missing",
+      ],
+    });
+  }
+});
+
 // Initialize routes (registerRoutes returns a server, but we don't need it in serverless)
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
