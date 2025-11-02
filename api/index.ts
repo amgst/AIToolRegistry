@@ -59,48 +59,41 @@ if (process.env.NODE_ENV === "production") {
 // Auto-create tables endpoint (one-time setup)
 app.get("/api/health/create-tables", async (req, res) => {
   try {
-    const { getDb } = await import("../server/db");
-    const dbInstance = await getDb();
-    const { sql } = await import("drizzle-orm");
-    
-    // Check if table exists
-    const result = await dbInstance.execute(sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'ai_tools'
-      );
-    `);
-    
-    const tableExists = result[0]?.exists || false;
-    
-    if (tableExists) {
-      return res.json({
-        success: true,
-        message: "Tables already exist",
-        action: "none",
-      });
-    }
-    
-    // Table doesn't exist - create it using Drizzle
-    const { drizzle } = await import("drizzle-orm/postgres-http");
-    const { neon } = await import("@neondatabase/serverless");
     const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
     
     if (!connectionString) {
       return res.status(400).json({
         success: false,
-        error: "POSTGRES_URL not set",
+        error: "POSTGRES_URL not set. Make sure Neon is connected in Vercel.",
       });
     }
     
-    // Import schema and create table
-    const schemaModule = await import("../shared/schema");
-    const sqlClient = neon(connectionString);
-    const pgDb = drizzle(sqlClient, { schema: schemaModule });
+    // Use Neon serverless client directly
+    const { neon } = await import("@neondatabase/serverless");
+    const sql = neon(connectionString);
     
-    // Use drizzle-kit's push functionality via API
-    // For now, we'll use raw SQL to create the table
-    await sqlClient(`
+    // Check if table exists using a regular SQL query
+    const checkQuery = `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        AND table_name = 'ai_tools'
+      ) as exists;
+    `;
+    
+    const checkResult = await sql(checkQuery);
+    const tableExists = checkResult?.[0]?.exists || false;
+    
+    if (tableExists) {
+      return res.json({
+        success: true,
+        message: "Tables already exist!",
+        action: "none",
+      });
+    }
+    
+    // Table doesn't exist - create it using raw SQL
+    const createTableQuery = `
       CREATE TABLE IF NOT EXISTS ai_tools (
         id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
         slug VARCHAR(255) NOT NULL UNIQUE,
@@ -111,33 +104,39 @@ app.get("/api/health/create-tables", async (req, res) => {
         pricing VARCHAR(50) NOT NULL,
         website_url VARCHAR(500) NOT NULL,
         logo_url VARCHAR(500),
-        features JSONB NOT NULL DEFAULT '[]',
-        tags JSONB NOT NULL DEFAULT '[]',
+        features JSONB NOT NULL DEFAULT '[]'::jsonb,
+        tags JSONB NOT NULL DEFAULT '[]'::jsonb,
         badge VARCHAR(50),
         rating INTEGER,
         source_detail_url VARCHAR(500),
         developer VARCHAR(255),
         documentation_url VARCHAR(500),
-        social_links JSONB DEFAULT '{}',
-        use_cases JSONB DEFAULT '[]',
+        social_links JSONB DEFAULT '{}'::jsonb,
+        use_cases JSONB DEFAULT '[]'::jsonb,
         launch_date VARCHAR(50),
         last_updated VARCHAR(50),
-        screenshots JSONB DEFAULT '[]',
-        pricing_details JSONB DEFAULT '{}'
+        screenshots JSONB DEFAULT '[]'::jsonb,
+        pricing_details JSONB DEFAULT '{}'::jsonb
       );
-    `);
+    `;
+    
+    await sql(createTableQuery);
     
     return res.json({
       success: true,
-      message: "Tables created successfully!",
+      message: "Tables created successfully! 🎉",
       action: "created",
+      nextStep: "Visit /admin to add your first tool",
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Error creating tables:", error);
+    
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : String(error),
-      hint: "Try running 'npx drizzle-kit push' locally instead",
+      error: errorMessage,
+      details: error instanceof Error ? error.stack : String(error),
+      hint: "If this persists, try running 'npx drizzle-kit push' locally with POSTGRES_URL set",
     });
   }
 });
