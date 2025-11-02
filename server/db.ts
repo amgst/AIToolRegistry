@@ -4,14 +4,14 @@ import * as schema from "@shared/schema";
 // Check if we should use PostgreSQL (Vercel Postgres)
 const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
 
-let db: any;
+let dbInstance: any;
 let dbInitialized = false;
 let dbError: Error | null = null;
 
 async function initializeDatabase() {
   if (dbInitialized) {
     if (dbError) throw dbError;
-    return db;
+    return dbInstance;
   }
   
   dbInitialized = true;
@@ -30,7 +30,7 @@ async function initializeDatabase() {
       const { drizzle: drizzlePostgres } = await import("drizzle-orm/neon-http");
       
       const sql = neon(connectionString);
-      db = drizzlePostgres(sql, { schema });
+      dbInstance = drizzlePostgres(sql, { schema });
       
       console.log("✅ Connected to PostgreSQL (Vercel Postgres)");
     } else {
@@ -49,12 +49,12 @@ async function initializeDatabase() {
       
       const sqlite = new Database(dbPath);
       sqlite.pragma("journal_mode = WAL");
-      db = drizzleSQLite(sqlite, { schema });
+      dbInstance = drizzleSQLite(sqlite, { schema });
       
       console.log("✅ Connected to SQLite (local development)");
     }
     
-    return db;
+    return dbInstance;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("❌ Database initialization failed:", errorMessage);

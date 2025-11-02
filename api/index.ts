@@ -155,9 +155,10 @@ app.get("/api/health", async (req, res) => {
     let errorMessage = null;
     
     try {
-      const { db } = await import("../server/db");
+      const { getDb } = await import("../server/db");
       const { aiTools } = await import("@shared/schema");
-      const tools = await db.select().from(aiTools).limit(1);
+      const dbInstance = await getDb();
+      const tools = await dbInstance.select().from(aiTools).limit(1);
       dbConnected = true;
       hasData = tools.length > 0;
     } catch (dbError) {
