@@ -93,6 +93,7 @@ app.get("/api/health/create-tables", async (req, res) => {
     }
     
     // Table doesn't exist - create it using raw SQL
+    // Using TEXT for JSON fields (same as SQLite) for compatibility
     const createTableQuery = `
       CREATE TABLE IF NOT EXISTS ai_tools (
         id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -104,19 +105,19 @@ app.get("/api/health/create-tables", async (req, res) => {
         pricing VARCHAR(50) NOT NULL,
         website_url VARCHAR(500) NOT NULL,
         logo_url VARCHAR(500),
-        features JSONB NOT NULL DEFAULT '[]'::jsonb,
-        tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+        features TEXT NOT NULL DEFAULT '[]',
+        tags TEXT NOT NULL DEFAULT '[]',
         badge VARCHAR(50),
         rating INTEGER,
         source_detail_url VARCHAR(500),
         developer VARCHAR(255),
         documentation_url VARCHAR(500),
-        social_links JSONB DEFAULT '{}'::jsonb,
-        use_cases JSONB DEFAULT '[]'::jsonb,
+        social_links TEXT DEFAULT '{}',
+        use_cases TEXT DEFAULT '[]',
         launch_date VARCHAR(50),
         last_updated VARCHAR(50),
-        screenshots JSONB DEFAULT '[]'::jsonb,
-        pricing_details JSONB DEFAULT '{}'::jsonb
+        screenshots TEXT DEFAULT '[]',
+        pricing_details TEXT DEFAULT '{}'
       );
     `;
     

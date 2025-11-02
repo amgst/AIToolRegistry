@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import { pgTable, varchar, integer as pgInteger, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, varchar, integer as pgInteger, text as pgText, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -33,30 +33,32 @@ const aiToolsSQLite = sqliteTable("ai_tools", {
   pricingDetails: text("pricing_details").default("{}"),
 });
 
-// PostgreSQL schema (uses jsonb for JSON fields - better performance)
+// PostgreSQL schema
+// Using text() for JSON fields for better drizzle-kit compatibility
+// We'll store JSON as text, same as SQLite, but PostgreSQL can still query it efficiently
 const aiToolsPostgres = pgTable("ai_tools", {
   id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
-  description: text("description").notNull(),
+  description: pgText("description").notNull(),
   shortDescription: varchar("short_description", { length: 500 }).notNull(),
   category: varchar("category", { length: 100 }).notNull(),
   pricing: varchar("pricing", { length: 50 }).notNull(),
   websiteUrl: varchar("website_url", { length: 500 }).notNull(),
   logoUrl: varchar("logo_url", { length: 500 }),
-  features: jsonb("features").notNull().default([]),
-  tags: jsonb("tags").notNull().default([]),
+  features: pgText("features").notNull().default("[]"),
+  tags: pgText("tags").notNull().default("[]"),
   badge: varchar("badge", { length: 50 }),
   rating: pgInteger("rating"),
   sourceDetailUrl: varchar("source_detail_url", { length: 500 }),
   developer: varchar("developer", { length: 255 }),
   documentationUrl: varchar("documentation_url", { length: 500 }),
-  socialLinks: jsonb("social_links").default({}),
-  useCases: jsonb("use_cases").default([]),
+  socialLinks: pgText("social_links").default("{}"),
+  useCases: pgText("use_cases").default("[]"),
   launchDate: varchar("launch_date", { length: 50 }),
   lastUpdated: varchar("last_updated", { length: 50 }),
-  screenshots: jsonb("screenshots").default([]),
-  pricingDetails: jsonb("pricing_details").default({}),
+  screenshots: pgText("screenshots").default("[]"),
+  pricingDetails: pgText("pricing_details").default("{}"),
 });
 
 // Export the appropriate table based on database type
