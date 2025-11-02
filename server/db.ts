@@ -8,54 +8,84 @@ import fs from "fs";
 // NOTE: SQLite doesn't work on Vercel! Use PostgreSQL instead.
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "database.sqlite");
 
-// Check if we're on Vercel and should use PostgreSQL
-const isVercel = process.env.VERCEL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+// Check if we're on Vercel
+const isVercel = !!process.env.VERCEL;
 
-if (isVercel && !process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
-  console.warn("⚠️ WARNING: Running on Vercel but no PostgreSQL connection string found!");
-  console.warn("⚠️ SQLite will not work on Vercel. Please set DATABASE_URL or POSTGRES_URL environment variable.");
-  console.warn("⚠️ See DEPLOYMENT.md for migration instructions.");
-}
-
-// Ensure the database directory exists (only for local SQLite)
-if (!isVercel) {
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-}
-
-let db: ReturnType<typeof drizzle>;
+// Lazy database initialization to prevent crashes during module load
+let db: ReturnType<typeof drizzle> | null = null;
 let sqlite: Database.Database | null = null;
+let dbInitialized = false;
+let dbError: Error | null = null;
 
-try {
-  if (isVercel && (process.env.DATABASE_URL || process.env.POSTGRES_URL)) {
-    // PostgreSQL mode - will be handled by migration
-    // For now, throw error to make migration obvious
-    throw new Error(
-      "PostgreSQL connection string detected but database code still uses SQLite. " +
-      "Please migrate server/db.ts to use PostgreSQL. See DEPLOYMENT.md"
-    );
-  } else {
-    // SQLite mode (local development)
+function initializeDatabase() {
+  if (dbInitialized) {
+    if (dbError) throw dbError;
+    return db!;
+  }
+  
+  dbInitialized = true;
+  
+  try {
+    if (isVercel) {
+      // On Vercel, SQLite won't work - provide clear error
+      if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+        throw new Error(
+          "SQLite doesn't work on Vercel. " +
+          "Please set DATABASE_URL or POSTGRES_URL environment variable and migrate to PostgreSQL. " +
+          "See DEPLOYMENT.md for instructions."
+        );
+      } else {
+        throw new Error(
+          "PostgreSQL connection string detected but database code still uses SQLite. " +
+          "Please migrate server/db.ts to use PostgreSQL. See DEPLOYMENT.md"
+        );
+      }
+    }
+    
+    // SQLite mode (local development only)
+    // Ensure the database directory exists
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    
     sqlite = new Database(dbPath);
     sqlite.pragma("journal_mode = WAL"); // Better performance
     db = drizzle(sqlite, { schema });
+    
+    return db;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("❌ Database initialization failed:", errorMessage);
+    dbError = error instanceof Error ? error : new Error(String(error));
+    
+    // On Vercel, don't throw immediately - let it fail gracefully when accessed
+    if (isVercel) {
+      console.error("⚠️ Database unavailable on Vercel. Functions will return empty results.");
+      return null;
+    }
+    
+    throw dbError;
   }
-} catch (error) {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  console.error("❌ Database initialization failed:", errorMessage);
-  
-  // On Vercel, provide helpful error message
-  if (isVercel) {
-    throw new Error(
-      `Database initialization failed on Vercel. ` +
-      `SQLite is not supported. Please migrate to PostgreSQL. ` +
-      `Error: ${errorMessage}`
-    );
-  }
-  
-  throw error;
 }
 
-export { db };
+// Create a proxy that initializes on first access
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+  get(target, prop) {
+    const actualDb = initializeDatabase();
+    if (!actualDb) {
+      // Return a mock db object that throws helpful errors
+      throw new Error(
+        "Database unavailable on Vercel. " +
+        "SQLite doesn't work on serverless platforms. " +
+        "Please migrate to PostgreSQL (Vercel Postgres). " +
+        "See DEPLOYMENT.md for migration instructions."
+      );
+    }
+    const value = actualDb[prop as keyof typeof actualDb];
+    if (typeof value === 'function') {
+      return value.bind(actualDb);
+    }
+    return value;
+  }
+});

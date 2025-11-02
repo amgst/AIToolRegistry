@@ -32,9 +32,19 @@ function normalizeWebsiteUrl(url: string): string {
 
 export class DatabaseStorage implements IStorage {
   async getAllTools(): Promise<AiTool[]> {
-    const tools = await db.select().from(aiTools);
-    // Convert JSON strings back to arrays
-    return tools.map(this.parseTool);
+    try {
+      const tools = await db.select().from(aiTools);
+      // Convert JSON strings back to arrays
+      return tools.map(this.parseTool);
+    } catch (error) {
+      // If database is unavailable (e.g., on Vercel without PostgreSQL), return empty array
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        console.warn("Database unavailable, returning empty array:", errorMessage);
+        return [];
+      }
+      throw error;
+    }
   }
   
   private parseTool(tool: any): AiTool {
@@ -54,13 +64,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getToolById(id: string): Promise<AiTool | undefined> {
-    const [tool] = await db.select().from(aiTools).where(eq(aiTools.id, id));
-    return tool ? this.parseTool(tool) : undefined;
+    try {
+      const [tool] = await db.select().from(aiTools).where(eq(aiTools.id, id));
+      return tool ? this.parseTool(tool) : undefined;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async getToolBySlug(slug: string): Promise<AiTool | undefined> {
-    const [tool] = await db.select().from(aiTools).where(eq(aiTools.slug, slug));
-    return tool ? this.parseTool(tool) : undefined;
+    try {
+      const [tool] = await db.select().from(aiTools).where(eq(aiTools.slug, slug));
+      return tool ? this.parseTool(tool) : undefined;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async getToolByWebsiteUrl(websiteUrl: string): Promise<AiTool | undefined> {
@@ -85,27 +111,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchTools(query: string): Promise<AiTool[]> {
-    const lowerQuery = query.toLowerCase();
-    const tools = await db
-      .select()
-      .from(aiTools)
-      .where(
-        or(
-          sql`LOWER(${aiTools.name}) LIKE ${`%${lowerQuery}%`}`,
-          sql`LOWER(${aiTools.shortDescription}) LIKE ${`%${lowerQuery}%`}`,
-          sql`LOWER(${aiTools.description}) LIKE ${`%${lowerQuery}%`}`
-        )
-      );
-    return tools.map(this.parseTool);
+    try {
+      const lowerQuery = query.toLowerCase();
+      const tools = await db
+        .select()
+        .from(aiTools)
+        .where(
+          or(
+            sql`LOWER(${aiTools.name}) LIKE ${`%${lowerQuery}%`}`,
+            sql`LOWER(${aiTools.shortDescription}) LIKE ${`%${lowerQuery}%`}`,
+            sql`LOWER(${aiTools.description}) LIKE ${`%${lowerQuery}%`}`
+          )
+        );
+      return tools.map(this.parseTool);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getToolsByCategory(category: string): Promise<AiTool[]> {
-    const lowerCategory = category.toLowerCase();
-    const tools = await db
-      .select()
-      .from(aiTools)
-      .where(sql`LOWER(${aiTools.category}) LIKE ${`%${lowerCategory}%`}`);
-    return tools.map(this.parseTool);
+    try {
+      const lowerCategory = category.toLowerCase();
+      const tools = await db
+        .select()
+        .from(aiTools)
+        .where(sql`LOWER(${aiTools.category}) LIKE ${`%${lowerCategory}%`}`);
+      return tools.map(this.parseTool);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async createTool(insertTool: InsertAiTool): Promise<AiTool> {
