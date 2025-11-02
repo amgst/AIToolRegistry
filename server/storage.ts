@@ -163,7 +163,11 @@ export class DatabaseStorage implements IStorage {
   async createTool(insertTool: InsertAiTool): Promise<AiTool> {
     const { getDb } = await import("./db");
     const dbInstance = await getDb();
-    const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+    // Check for PostgreSQL using same logic as db.ts
+    const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL 
+      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
+      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
+    const usePostgres = !!pgUrl;
     
     // For SQLite: Convert arrays/objects to JSON strings
     // For PostgreSQL: Keep as arrays/objects (jsonb handles them natively)
@@ -214,7 +218,11 @@ export class DatabaseStorage implements IStorage {
   async updateTool(id: string, updateData: Partial<InsertAiTool>): Promise<AiTool | undefined> {
     const { getDb } = await import("./db");
     const dbInstance = await getDb();
-    const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+    // Check for PostgreSQL using same logic as db.ts
+    const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL 
+      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
+      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
+    const usePostgres = !!pgUrl;
     
     // For SQLite: Convert arrays/objects to JSON strings
     // For PostgreSQL: Keep as arrays/objects

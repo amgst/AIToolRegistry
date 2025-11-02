@@ -7,7 +7,16 @@ import { z } from "zod";
 // Support both SQLite and PostgreSQL
 // Check lazily to avoid issues during module load
 function getUsePostgres() {
-  return !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+  // Check standard names first
+  if (process.env.POSTGRES_URL || process.env.DATABASE_URL) return true;
+  
+  // Check common prefixes (Neon/Vercel may add prefixes like ai_, a1_, etc.)
+  const prefixes = ['ai_', 'a1_', 'POSTGRES_', 'DB_'];
+  for (const prefix of prefixes) {
+    if (process.env[`${prefix}POSTGRES_URL`] || process.env[`${prefix}DATABASE_URL`]) return true;
+  }
+  
+  return false;
 }
 
 // SQLite schema

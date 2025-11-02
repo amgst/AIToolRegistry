@@ -1,8 +1,25 @@
 // Database connection - supports both SQLite (local) and PostgreSQL (Vercel)
 // Don't import schema at top level - import dynamically to avoid module load issues
 
+// Helper function to get PostgreSQL connection string
+// Checks both standard and prefixed environment variable names (Neon/Vercel may use prefixes)
+function getPostgresUrl(): string | undefined {
+  // Check standard names first
+  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  
+  // Check common prefixes (Neon/Vercel may add prefixes like ai_, a1_, etc.)
+  const prefixes = ['ai_', 'a1_', 'POSTGRES_', 'DB_'];
+  for (const prefix of prefixes) {
+    if (process.env[`${prefix}POSTGRES_URL`]) return process.env[`${prefix}POSTGRES_URL`];
+    if (process.env[`${prefix}DATABASE_URL`]) return process.env[`${prefix}DATABASE_URL`];
+  }
+  
+  return undefined;
+}
+
 // Check if we should use PostgreSQL (Vercel Postgres)
-const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+const usePostgres = !!getPostgresUrl();
 
 let dbInstance: any;
 let dbInitialized = false;
@@ -19,10 +36,10 @@ async function initializeDatabase() {
   try {
     if (usePostgres) {
       // PostgreSQL mode (Vercel Postgres)
-      const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+      const connectionString = getPostgresUrl();
       
       if (!connectionString) {
-        throw new Error("POSTGRES_URL or DATABASE_URL environment variable is required for PostgreSQL");
+        throw new Error("POSTGRES_URL or DATABASE_URL (or prefixed variants like ai_POSTGRES_URL) environment variable is required for PostgreSQL");
       }
       
       // Use Neon serverless driver for Vercel (works with connection pooling)

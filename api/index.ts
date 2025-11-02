@@ -48,7 +48,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // Auto-create tables endpoint (one-time setup)
 app.get("/api/health/create-tables", async (req, res) => {
   try {
-    const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+    // Check for PostgreSQL URL with standard and prefixed names
+    const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL
+      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
+      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
     
     if (!connectionString) {
       return res.status(400).json({
@@ -135,9 +138,11 @@ app.get("/api/health/create-tables", async (req, res) => {
 app.get("/api/health", async (req, res) => {
   try {
     const isVercel = !!process.env.VERCEL;
-    const dbType = process.env.DATABASE_URL || process.env.POSTGRES_URL 
-      ? "PostgreSQL" 
-      : "SQLite";
+    // Check for PostgreSQL with standard and prefixed names
+    const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL
+      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
+      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
+    const dbType = pgUrl ? "PostgreSQL" : "SQLite";
     
     let dbConnected = false;
     let hasData = false;
@@ -184,8 +189,8 @@ app.get("/api/health", async (req, res) => {
       issues: issues.length > 0 ? issues : undefined,
       environment: {
         nodeEnv: process.env.NODE_ENV,
-        hasDatabaseUrl: !!process.env.DATABASE_URL,
-        hasPostgresUrl: !!process.env.POSTGRES_URL,
+        hasDatabaseUrl: !!(process.env.DATABASE_URL || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL']),
+        hasPostgresUrl: !!(process.env.POSTGRES_URL || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']),
         isVercel: isVercel,
       },
       recommendations: [
