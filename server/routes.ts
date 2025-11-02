@@ -24,9 +24,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(tools);
     } catch (error) {
-      console.error("Error fetching tools:", error);
-      // Graceful fallback: return an empty list instead of 500
-      res.status(200).json([]);
+      // Log detailed error information
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error("Error fetching tools:", {
+        message: errorMessage,
+        stack: errorStack,
+        dbType: process.env.DATABASE_URL ? "PostgreSQL" : "SQLite",
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        hasPostgresUrl: !!process.env.POSTGRES_URL,
+      });
+      
+      // Return detailed error in development, graceful fallback in production
+      if (process.env.NODE_ENV === "development") {
+        res.status(500).json({ 
+          error: "Failed to fetch tools", 
+          details: errorMessage,
+          hint: "Database connection issue? Check if SQLite file exists or PostgreSQL is configured."
+        });
+      } else {
+        // In production, return empty array to prevent app crash
+        // But log the error for debugging
+        res.status(200).json([]);
+      }
     }
   });
 

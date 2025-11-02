@@ -59,30 +59,67 @@ if (process.env.NODE_ENV === "production") {
 // Health check endpoint for debugging
 app.get("/api/health", async (req, res) => {
   try {
-    const { db } = await import("../server/db");
-    const { aiTools } = await import("@shared/schema");
-    const tools = await db.select().from(aiTools).limit(1);
-    
+    const isVercel = !!process.env.VERCEL;
     const dbType = process.env.DATABASE_URL || process.env.POSTGRES_URL 
       ? "PostgreSQL" 
       : "SQLite";
     
+    let dbConnected = false;
+    let hasData = false;
+    let errorMessage = null;
+    
+    try {
+      const { db } = await import("../server/db");
+      const { aiTools } = await import("@shared/schema");
+      const tools = await db.select().from(aiTools).limit(1);
+      dbConnected = true;
+      hasData = tools.length > 0;
+    } catch (dbError) {
+      dbConnected = false;
+      errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
+    }
+    
+    const issues: string[] = [];
+    if (!dbConnected) {
+      issues.push("❌ Database connection failed");
+      if (isVercel && dbType === "SQLite") {
+        issues.push("SQLite doesn't work on Vercel - need PostgreSQL");
+      }
+      if (errorMessage) {
+        issues.push(`Error: ${errorMessage}`);
+      }
+    }
+    if (dbConnected && !hasData) {
+      issues.push("⚠️ No tools in database - need to seed data");
+    }
+    if (isVercel && dbType === "SQLite") {
+      issues.push("⚠️ SQLite doesn't work on Vercel - need PostgreSQL");
+    }
+    
     return res.json({
-      status: "ok",
+      status: dbConnected ? "ok" : "error",
+      platform: isVercel ? "Vercel" : "Local",
       database: {
         type: dbType,
-        connected: true,
-        hasData: tools.length > 0,
+        connected: dbConnected,
+        hasData: hasData,
+        error: errorMessage,
       },
-      issues: [
-        dbType === "SQLite" ? "⚠️ SQLite doesn't work on Vercel - need PostgreSQL" : null,
-        tools.length === 0 ? "⚠️ No tools in database - need to seed data" : null,
-      ].filter(Boolean),
+      issues: issues.length > 0 ? issues : undefined,
       environment: {
         nodeEnv: process.env.NODE_ENV,
         hasDatabaseUrl: !!process.env.DATABASE_URL,
         hasPostgresUrl: !!process.env.POSTGRES_URL,
+        isVercel: isVercel,
       },
+      recommendations: [
+        !dbConnected && isVercel && dbType === "SQLite" 
+          ? "Migrate to Vercel Postgres - see DEPLOYMENT.md" 
+          : null,
+        dbConnected && !hasData 
+          ? "Run seed script or use admin panel to import tools" 
+          : null,
+      ].filter(Boolean),
     });
   } catch (error) {
     return res.status(500).json({
