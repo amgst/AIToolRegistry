@@ -6,7 +6,8 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { sourcesStorage } = await import("../../server/scrapers/sources-storage");
+    // Try both paths - during build server files are copied to api/server
+    const { sourcesStorage } = await import("../server/scrapers/sources-storage").catch(() => import("../../server/scrapers/sources-storage"));
     const sources = sourcesStorage.getAllSources().filter(s => s.enabled && s.schedule);
     
     const host = req.headers.host || "localhost:5000";

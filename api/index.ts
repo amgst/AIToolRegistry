@@ -149,8 +149,10 @@ app.get("/api/health", async (req, res) => {
     let errorMessage = null;
     
     try {
-      const { getDb } = await import("../server/db");
-      const { aiTools } = await import("@shared/schema");
+      // Try both paths - during build server files are copied to api/server
+      const { getDb } = await import("./server/db").catch(() => import("../server/db"));
+      // Try shared paths - copied to api/shared during build
+      const { aiTools } = await import("./shared/schema").catch(() => import("@shared/schema").catch(() => import("../shared/schema")));
       const dbInstance = await getDb();
       const tools = await dbInstance.select().from(aiTools).limit(1);
       dbConnected = true;
@@ -229,7 +231,8 @@ async function initialize() {
   initPromise = (async () => {
     try {
       // Dynamically import routes to avoid module load issues
-      const { registerRoutes } = await import("../server/routes");
+      // Try both paths - during build server files are copied to api/server
+      const { registerRoutes } = await import("./server/routes").catch(() => import("../server/routes"));
       await registerRoutes(app);
       
       // Add static file serving in production (after routes)

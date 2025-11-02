@@ -3,6 +3,6 @@ database.sqlite
 database.sqlite-shm
 database.sqlite-wal
 dist/index.js
-# Don't exclude server/ - it's needed for API functions
-# Don't exclude shared/ - it's needed for schema
+# Note: server/ and shared/ are copied to api/ during build, so don't exclude them
+# The copied versions in api/server/ and api/shared/ will be used by Vercel
 
