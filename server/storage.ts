@@ -1,5 +1,5 @@
 import { aiTools, type AiTool, type InsertAiTool } from "@shared/schema";
-import { db } from "./db";
+// Don't import db directly - use getDb() dynamically to avoid eager initialization
 import { eq, ilike, or, sql } from "drizzle-orm";
 
 export interface IStorage {

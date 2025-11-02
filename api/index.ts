@@ -224,7 +224,7 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-// Initialize routes (registerRoutes returns a server, but we don't need it in serverless)
+// Initialize routes lazily - only when first request comes in
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 
@@ -233,15 +233,38 @@ async function initialize() {
   if (initPromise) return initPromise;
   
   initPromise = (async () => {
-    await registerRoutes(app);
-    isInitialized = true;
+    try {
+      await registerRoutes(app);
+      isInitialized = true;
+      console.log("✅ Routes initialized successfully");
+    } catch (error) {
+      console.error("❌ Error initializing routes:", error);
+      isInitialized = true; // Mark as initialized to prevent loops
+      // Don't throw - let error handler catch it
+    }
   })();
   
   await initPromise;
 }
 
-// Initialize on import
-initialize().catch(console.error);
+// Middleware to ensure routes are initialized before handling requests
+app.use(async (req, res, next) => {
+  // Skip initialization for health endpoints (they work independently)
+  if (req.path === "/api/health" || req.path === "/api/health/create-tables") {
+    return next();
+  }
+  
+  try {
+    await initialize();
+    next();
+  } catch (error) {
+    console.error("Initialization error:", error);
+    res.status(500).json({ 
+      error: "Server initialization failed",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
 
 // Vercel serverless function handler - exports Express app
 export default app;

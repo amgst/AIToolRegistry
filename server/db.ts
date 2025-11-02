@@ -1,5 +1,5 @@
 // Database connection - supports both SQLite (local) and PostgreSQL (Vercel)
-import * as schema from "@shared/schema";
+// Don't import schema at top level - import dynamically to avoid module load issues
 
 // Check if we should use PostgreSQL (Vercel Postgres)
 const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
@@ -30,7 +30,10 @@ async function initializeDatabase() {
       const { drizzle: drizzlePostgres } = await import("drizzle-orm/neon-http");
       
       const sql = neon(connectionString);
-      dbInstance = drizzlePostgres(sql, { schema });
+      
+      // Dynamically import schema to avoid module load issues
+      const schemaModule = await import("@shared/schema");
+      dbInstance = drizzlePostgres(sql, { schema: schemaModule });
       
       console.log("✅ Connected to PostgreSQL (Vercel Postgres)");
     } else {
@@ -49,7 +52,10 @@ async function initializeDatabase() {
       
       const sqlite = new Database(dbPath);
       sqlite.pragma("journal_mode = WAL");
-      dbInstance = drizzleSQLite(sqlite, { schema });
+      
+      // Dynamically import schema to avoid module load issues
+      const schemaModule = await import("@shared/schema");
+      dbInstance = drizzleSQLite(sqlite, { schema: schemaModule });
       
       console.log("✅ Connected to SQLite (local development)");
     }

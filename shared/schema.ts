@@ -5,7 +5,10 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Support both SQLite and PostgreSQL
-const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+// Check lazily to avoid issues during module load
+function getUsePostgres() {
+  return !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+}
 
 // SQLite schema
 const aiToolsSQLite = sqliteTable("ai_tools", {
@@ -62,7 +65,11 @@ const aiToolsPostgres = pgTable("ai_tools", {
 });
 
 // Export the appropriate table based on database type
-export const aiTools = usePostgres ? aiToolsPostgres : aiToolsSQLite;
+// Use a getter function to check at runtime, not module load time
+export const aiTools = (() => {
+  // Check at runtime when table is actually used
+  return getUsePostgres() ? aiToolsPostgres : aiToolsSQLite;
+})();
 
 // Custom schema for API - features, tags, and new JSON fields are arrays/objects
 const apiToolSchema = createInsertSchema(aiTools, {
