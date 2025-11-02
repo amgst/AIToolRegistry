@@ -56,6 +56,92 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
+// Auto-create tables endpoint (one-time setup)
+app.get("/api/health/create-tables", async (req, res) => {
+  try {
+    const { getDb } = await import("../server/db");
+    const dbInstance = await getDb();
+    const { sql } = await import("drizzle-orm");
+    
+    // Check if table exists
+    const result = await dbInstance.execute(sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'ai_tools'
+      );
+    `);
+    
+    const tableExists = result[0]?.exists || false;
+    
+    if (tableExists) {
+      return res.json({
+        success: true,
+        message: "Tables already exist",
+        action: "none",
+      });
+    }
+    
+    // Table doesn't exist - create it using Drizzle
+    const { drizzle } = await import("drizzle-orm/postgres-http");
+    const { neon } = await import("@neondatabase/serverless");
+    const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+    
+    if (!connectionString) {
+      return res.status(400).json({
+        success: false,
+        error: "POSTGRES_URL not set",
+      });
+    }
+    
+    // Import schema and create table
+    const schemaModule = await import("../shared/schema");
+    const sqlClient = neon(connectionString);
+    const pgDb = drizzle(sqlClient, { schema: schemaModule });
+    
+    // Use drizzle-kit's push functionality via API
+    // For now, we'll use raw SQL to create the table
+    await sqlClient(`
+      CREATE TABLE IF NOT EXISTS ai_tools (
+        id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        slug VARCHAR(255) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        short_description VARCHAR(500) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        pricing VARCHAR(50) NOT NULL,
+        website_url VARCHAR(500) NOT NULL,
+        logo_url VARCHAR(500),
+        features JSONB NOT NULL DEFAULT '[]',
+        tags JSONB NOT NULL DEFAULT '[]',
+        badge VARCHAR(50),
+        rating INTEGER,
+        source_detail_url VARCHAR(500),
+        developer VARCHAR(255),
+        documentation_url VARCHAR(500),
+        social_links JSONB DEFAULT '{}',
+        use_cases JSONB DEFAULT '[]',
+        launch_date VARCHAR(50),
+        last_updated VARCHAR(50),
+        screenshots JSONB DEFAULT '[]',
+        pricing_details JSONB DEFAULT '{}'
+      );
+    `);
+    
+    return res.json({
+      success: true,
+      message: "Tables created successfully!",
+      action: "created",
+    });
+  } catch (error) {
+    console.error("Error creating tables:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      hint: "Try running 'npx drizzle-kit push' locally instead",
+    });
+  }
+});
+
 // Health check endpoint for debugging
 app.get("/api/health", async (req, res) => {
   try {
