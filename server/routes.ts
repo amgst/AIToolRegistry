@@ -389,11 +389,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               category: item.category || "Content AI",
               pricing: item.pricing || "Unknown",
               websiteUrl: item.websiteUrl,
-              logoUrl: item.logoUrl || null,
+              logoUrl: item.logoUrl || undefined,
               features: Array.isArray(item.features) ? item.features : [],
               tags: Array.isArray(item.tags) ? item.tags : [],
-              badge: item.badge ?? null,
-              rating: item.rating ?? null,
+              useCases: [],
+              screenshots: [],
+              badge: item.badge ?? undefined,
+              rating: item.rating ?? undefined,
             });
           }
           inserted++;
@@ -434,9 +436,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         concurrency?: number;
       };
 
+      // Better error logging
+      if (!body || typeof body !== 'object') {
+        console.error("Invalid request body:", req.body);
+        return res.status(400).json({
+          error: "Invalid request body. Expected JSON object.",
+        });
+      }
+
       if (!body.name || !body.type || !body.url) {
+        console.error("Missing required fields:", { name: body.name, type: body.type, url: body.url });
         return res.status(400).json({
           error: "Missing required fields: name, type, url",
+          received: { name: body.name, type: body.type, url: body.url },
         });
       }
 
@@ -588,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 tags: Array.isArray(item.tags) ? item.tags : existing.tags,
                 badge: item.badge || existing.badge,
                 rating: item.rating ?? existing.rating,
-                sourceDetailUrl: item.sourceDetailUrl || existing.sourceDetailUrl,
+                sourceDetailUrl: item.sourceDetailUrl || existing.sourceDetailUrl || undefined,
               });
               updated++;
               processed.push(slug);
@@ -614,6 +626,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               logoUrl: item.logoUrl || undefined,
               features: Array.isArray(item.features) ? item.features : [],
               tags: Array.isArray(item.tags) ? item.tags : [],
+              useCases: Array.isArray(item.useCases) ? item.useCases : [],
+              screenshots: Array.isArray(item.screenshots) ? item.screenshots : [],
               badge: item.badge || undefined,
               rating: item.rating || undefined,
               sourceDetailUrl: item.sourceDetailUrl,

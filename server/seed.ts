@@ -136,11 +136,13 @@ async function seedFromAitoolnet(limit = 25) {
         category: item.category,
         pricing: item.pricing,
         websiteUrl: item.websiteUrl,
-        logoUrl: null,
+        logoUrl: undefined,
         features: item.features,
         tags: item.tags,
-        badge: item.badge,
-        rating: item.rating ?? null,
+        useCases: [],
+        screenshots: [],
+        badge: item.badge ?? undefined,
+        rating: item.rating ?? undefined,
       });
       inserted++;
     } catch (e) {
@@ -317,11 +319,13 @@ async function seedSample() {
         category: s.category,
         pricing: s.pricing,
         websiteUrl: s.websiteUrl,
-        logoUrl: null,
+        logoUrl: undefined,
         features: s.features,
         tags: s.tags,
-        badge: s.badge,
-        rating: s.rating ?? null,
+        useCases: [],
+        screenshots: [],
+        badge: s.badge ?? undefined,
+        rating: s.rating ?? undefined,
       });
       inserted++;
     } catch (e) {

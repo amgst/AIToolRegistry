@@ -150,10 +150,11 @@ export default function Admin() {
       setNewSource({ name: "", type: "generic", url: "", limit: 100 });
       toast({ title: "Source created successfully!" });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      console.error("Error creating source:", error);
       toast({
         title: "Error",
-        description: "Failed to create source",
+        description: error.message || "Failed to create source",
         variant: "destructive",
       });
     },
@@ -264,8 +265,10 @@ export default function Admin() {
         websiteUrl: item.websiteUrl!,
         features: item.features ?? [],
         tags: item.tags ?? [],
-        badge: item.badge ?? null,
-        rating: item.rating ?? null,
+        useCases: [],
+        screenshots: [],
+        badge: item.badge ?? undefined,
+        rating: item.rating ?? undefined,
       };
 
       try {
@@ -644,7 +647,13 @@ export default function Admin() {
                 <div className="flex gap-2">
                   <Button
                     onClick={() => {
-                      createSourceMutation.mutate(newSource);
+                      // Ensure limit is a valid number
+                      const sourceToCreate = {
+                        ...newSource,
+                        limit: typeof newSource.limit === 'number' ? newSource.limit : parseInt(String(newSource.limit || "100"), 10),
+                      };
+                      console.log("Creating source:", sourceToCreate);
+                      createSourceMutation.mutate(sourceToCreate);
                     }}
                     disabled={!newSource.name || !newSource.url || createSourceMutation.isPending}
                   >
@@ -1172,7 +1181,7 @@ export default function Admin() {
               <Input
                 id="developer"
                 name="developer"
-                defaultValue={editingTool?.developer}
+                defaultValue={editingTool?.developer || ""}
                 placeholder="e.g., OpenAI"
                 data-testid="input-developer"
               />
@@ -1184,7 +1193,7 @@ export default function Admin() {
                 id="documentationUrl"
                 name="documentationUrl"
                 type="url"
-                defaultValue={editingTool?.documentationUrl}
+                defaultValue={editingTool?.documentationUrl || ""}
                 placeholder="https://docs.example.com"
                 data-testid="input-documentation-url"
               />
@@ -1207,7 +1216,7 @@ export default function Admin() {
                 id="sourceDetailUrl"
                 name="sourceDetailUrl"
                 type="url"
-                defaultValue={editingTool?.sourceDetailUrl}
+                defaultValue={editingTool?.sourceDetailUrl || ""}
                 placeholder="https://source-website.com/tool-name"
                 data-testid="input-source-detail-url"
               />
