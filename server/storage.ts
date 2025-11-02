@@ -33,7 +33,9 @@ function normalizeWebsiteUrl(url: string): string {
 export class DatabaseStorage implements IStorage {
   async getAllTools(): Promise<AiTool[]> {
     try {
-      const tools = await db.select().from(aiTools);
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
+      const tools = await dbInstance.select().from(aiTools);
       // Convert JSON strings back to arrays
       return tools.map(this.parseTool);
     } catch (error) {
@@ -65,7 +67,9 @@ export class DatabaseStorage implements IStorage {
 
   async getToolById(id: string): Promise<AiTool | undefined> {
     try {
-      const [tool] = await db.select().from(aiTools).where(eq(aiTools.id, id));
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
+      const [tool] = await dbInstance.select().from(aiTools).where(eq(aiTools.id, id));
       return tool ? this.parseTool(tool) : undefined;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -78,7 +82,9 @@ export class DatabaseStorage implements IStorage {
 
   async getToolBySlug(slug: string): Promise<AiTool | undefined> {
     try {
-      const [tool] = await db.select().from(aiTools).where(eq(aiTools.slug, slug));
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
+      const [tool] = await dbInstance.select().from(aiTools).where(eq(aiTools.slug, slug));
       return tool ? this.parseTool(tool) : undefined;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -112,8 +118,10 @@ export class DatabaseStorage implements IStorage {
 
   async searchTools(query: string): Promise<AiTool[]> {
     try {
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
       const lowerQuery = query.toLowerCase();
-      const tools = await db
+      const tools = await dbInstance
         .select()
         .from(aiTools)
         .where(
@@ -135,8 +143,10 @@ export class DatabaseStorage implements IStorage {
 
   async getToolsByCategory(category: string): Promise<AiTool[]> {
     try {
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
       const lowerCategory = category.toLowerCase();
-      const tools = await db
+      const tools = await dbInstance
         .select()
         .from(aiTools)
         .where(sql`LOWER(${aiTools.category}) LIKE ${`%${lowerCategory}%`}`);

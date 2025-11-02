@@ -1,10 +1,14 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, varchar, integer as pgInteger, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Database schema - features and tags are stored as JSON strings in SQLite
-export const aiTools = sqliteTable("ai_tools", {
+// Support both SQLite and PostgreSQL
+const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+
+// SQLite schema
+const aiToolsSQLite = sqliteTable("ai_tools", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
@@ -14,21 +18,49 @@ export const aiTools = sqliteTable("ai_tools", {
   pricing: text("pricing").notNull(),
   websiteUrl: text("website_url").notNull(),
   logoUrl: text("logo_url"),
-  features: text("features").notNull().default("[]"), // JSON array stored as text
-  tags: text("tags").notNull().default("[]"), // JSON array stored as text
+  features: text("features").notNull().default("[]"),
+  tags: text("tags").notNull().default("[]"),
   badge: text("badge"),
   rating: integer("rating"),
-  // Extended fields
-  sourceDetailUrl: text("source_detail_url"), // Where this tool was scraped from
-  developer: text("developer"), // Company/developer name
-  documentationUrl: text("documentation_url"), // Link to documentation
-  socialLinks: text("social_links").default("{}"), // JSON object: { twitter, linkedin, github, etc. }
-  useCases: text("use_cases").default("[]"), // JSON array of use cases
-  launchDate: text("launch_date"), // ISO date string
-  lastUpdated: text("last_updated"), // ISO date string - when record was last updated
-  screenshots: text("screenshots").default("[]"), // JSON array of image URLs
-  pricingDetails: text("pricing_details").default("{}"), // JSON object with structured pricing info
+  sourceDetailUrl: text("source_detail_url"),
+  developer: text("developer"),
+  documentationUrl: text("documentation_url"),
+  socialLinks: text("social_links").default("{}"),
+  useCases: text("use_cases").default("[]"),
+  launchDate: text("launch_date"),
+  lastUpdated: text("last_updated"),
+  screenshots: text("screenshots").default("[]"),
+  pricingDetails: text("pricing_details").default("{}"),
 });
+
+// PostgreSQL schema (uses jsonb for JSON fields - better performance)
+const aiToolsPostgres = pgTable("ai_tools", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  shortDescription: varchar("short_description", { length: 500 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  pricing: varchar("pricing", { length: 50 }).notNull(),
+  websiteUrl: varchar("website_url", { length: 500 }).notNull(),
+  logoUrl: varchar("logo_url", { length: 500 }),
+  features: jsonb("features").notNull().default([]),
+  tags: jsonb("tags").notNull().default([]),
+  badge: varchar("badge", { length: 50 }),
+  rating: pgInteger("rating"),
+  sourceDetailUrl: varchar("source_detail_url", { length: 500 }),
+  developer: varchar("developer", { length: 255 }),
+  documentationUrl: varchar("documentation_url", { length: 500 }),
+  socialLinks: jsonb("social_links").default({}),
+  useCases: jsonb("use_cases").default([]),
+  launchDate: varchar("launch_date", { length: 50 }),
+  lastUpdated: varchar("last_updated", { length: 50 }),
+  screenshots: jsonb("screenshots").default([]),
+  pricingDetails: jsonb("pricing_details").default({}),
+});
+
+// Export the appropriate table based on database type
+export const aiTools = usePostgres ? aiToolsPostgres : aiToolsSQLite;
 
 // Custom schema for API - features, tags, and new JSON fields are arrays/objects
 const apiToolSchema = createInsertSchema(aiTools, {
@@ -48,7 +80,7 @@ const apiToolSchema = createInsertSchema(aiTools, {
     plans: z.array(z.object({
       name: z.string(),
       price: z.string(),
-      period: z.string().optional(), // "month", "year", "one-time", etc.
+      period: z.string().optional(),
       currency: z.string().optional(),
       features: z.array(z.string()).optional(),
       popular: z.boolean().optional(),
