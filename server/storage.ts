@@ -161,43 +161,50 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTool(insertTool: InsertAiTool): Promise<AiTool> {
-    // Convert arrays/objects to JSON strings for SQLite
-    const values: any = {
-      ...insertTool,
-      features: Array.isArray(insertTool.features) 
-        ? JSON.stringify(insertTool.features) 
-        : insertTool.features,
-      tags: Array.isArray(insertTool.tags) 
-        ? JSON.stringify(insertTool.tags) 
-        : insertTool.tags,
-    };
+    const { getDb } = await import("./db");
+    const dbInstance = await getDb();
+    const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
     
-    // Handle new JSON fields
-    if (insertTool.socialLinks !== undefined) {
-      values.socialLinks = typeof insertTool.socialLinks === "object"
-        ? JSON.stringify(insertTool.socialLinks)
-        : insertTool.socialLinks;
+    // For SQLite: Convert arrays/objects to JSON strings
+    // For PostgreSQL: Keep as arrays/objects (jsonb handles them natively)
+    const values: any = { ...insertTool };
+    
+    if (!usePostgres) {
+      // SQLite mode - stringify JSON fields
+      values.features = Array.isArray(insertTool.features) 
+        ? JSON.stringify(insertTool.features) 
+        : insertTool.features;
+      values.tags = Array.isArray(insertTool.tags) 
+        ? JSON.stringify(insertTool.tags) 
+        : insertTool.tags;
+      
+      if (insertTool.socialLinks !== undefined) {
+        values.socialLinks = typeof insertTool.socialLinks === "object"
+          ? JSON.stringify(insertTool.socialLinks)
+          : insertTool.socialLinks;
+      }
+      if (insertTool.useCases !== undefined) {
+        values.useCases = Array.isArray(insertTool.useCases)
+          ? JSON.stringify(insertTool.useCases)
+          : insertTool.useCases;
+      }
+      if (insertTool.screenshots !== undefined) {
+        values.screenshots = Array.isArray(insertTool.screenshots)
+          ? JSON.stringify(insertTool.screenshots)
+          : insertTool.screenshots;
+      }
+      if (insertTool.pricingDetails !== undefined) {
+        values.pricingDetails = typeof insertTool.pricingDetails === "object"
+          ? JSON.stringify(insertTool.pricingDetails)
+          : insertTool.pricingDetails;
+      }
     }
-    if (insertTool.useCases !== undefined) {
-      values.useCases = Array.isArray(insertTool.useCases)
-        ? JSON.stringify(insertTool.useCases)
-        : insertTool.useCases;
-    }
-    if (insertTool.screenshots !== undefined) {
-      values.screenshots = Array.isArray(insertTool.screenshots)
-        ? JSON.stringify(insertTool.screenshots)
-        : insertTool.screenshots;
-    }
-    if (insertTool.pricingDetails !== undefined) {
-      values.pricingDetails = typeof insertTool.pricingDetails === "object"
-        ? JSON.stringify(insertTool.pricingDetails)
-        : insertTool.pricingDetails;
-    }
+    // For PostgreSQL, arrays/objects are kept as-is (jsonb handles them)
     
     // Set lastUpdated timestamp
     values.lastUpdated = new Date().toISOString();
     
-    const [tool] = await db
+    const [tool] = await dbInstance
       .insert(aiTools)
       .values(values)
       .returning();
@@ -205,39 +212,49 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTool(id: string, updateData: Partial<InsertAiTool>): Promise<AiTool | undefined> {
-    // Convert arrays/objects to JSON strings if present
+    const { getDb } = await import("./db");
+    const dbInstance = await getDb();
+    const usePostgres = !!(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+    
+    // For SQLite: Convert arrays/objects to JSON strings
+    // For PostgreSQL: Keep as arrays/objects
     const values: any = { ...updateData };
-    if (Array.isArray(updateData.features)) {
-      values.features = JSON.stringify(updateData.features);
+    
+    if (!usePostgres) {
+      // SQLite mode - stringify JSON fields
+      if (Array.isArray(updateData.features)) {
+        values.features = JSON.stringify(updateData.features);
+      }
+      if (Array.isArray(updateData.tags)) {
+        values.tags = JSON.stringify(updateData.tags);
+      }
+      if (updateData.socialLinks !== undefined) {
+        values.socialLinks = typeof updateData.socialLinks === "object"
+          ? JSON.stringify(updateData.socialLinks)
+          : updateData.socialLinks;
+      }
+      if (updateData.useCases !== undefined) {
+        values.useCases = Array.isArray(updateData.useCases)
+          ? JSON.stringify(updateData.useCases)
+          : updateData.useCases;
+      }
+      if (updateData.screenshots !== undefined) {
+        values.screenshots = Array.isArray(updateData.screenshots)
+          ? JSON.stringify(updateData.screenshots)
+          : updateData.screenshots;
+      }
+      if (updateData.pricingDetails !== undefined) {
+        values.pricingDetails = typeof updateData.pricingDetails === "object"
+          ? JSON.stringify(updateData.pricingDetails)
+          : updateData.pricingDetails;
+      }
     }
-    if (Array.isArray(updateData.tags)) {
-      values.tags = JSON.stringify(updateData.tags);
-    }
-    if (updateData.socialLinks !== undefined) {
-      values.socialLinks = typeof updateData.socialLinks === "object"
-        ? JSON.stringify(updateData.socialLinks)
-        : updateData.socialLinks;
-    }
-    if (updateData.useCases !== undefined) {
-      values.useCases = Array.isArray(updateData.useCases)
-        ? JSON.stringify(updateData.useCases)
-        : updateData.useCases;
-    }
-    if (updateData.screenshots !== undefined) {
-      values.screenshots = Array.isArray(updateData.screenshots)
-        ? JSON.stringify(updateData.screenshots)
-        : updateData.screenshots;
-    }
-    if (updateData.pricingDetails !== undefined) {
-      values.pricingDetails = typeof updateData.pricingDetails === "object"
-        ? JSON.stringify(updateData.pricingDetails)
-        : updateData.pricingDetails;
-    }
+    // For PostgreSQL, arrays/objects are kept as-is
     
     // Update lastUpdated timestamp
     values.lastUpdated = new Date().toISOString();
     
-    const [tool] = await db
+    const [tool] = await dbInstance
       .update(aiTools)
       .set(values)
       .where(eq(aiTools.id, id))
@@ -246,11 +263,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTool(id: string): Promise<boolean> {
-    const result = await db
-      .delete(aiTools)
-      .where(eq(aiTools.id, id))
-      .returning();
-    return result.length > 0;
+    try {
+      const { getDb } = await import("./db");
+      const dbInstance = await getDb();
+      const result = await dbInstance
+        .delete(aiTools)
+        .where(eq(aiTools.id, id))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
+        return false;
+      }
+      throw error;
+    }
   }
 }
 
