@@ -3,6 +3,6 @@ database.sqlite
 database.sqlite-shm
 database.sqlite-wal
 dist/index.js
-server/
-!api/
+# Don't exclude server/ - it's needed for API functions
+# Don't exclude shared/ - it's needed for schema
 
