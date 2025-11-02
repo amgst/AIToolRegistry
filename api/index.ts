@@ -266,6 +266,7 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Vercel serverless function handler - exports Express app
+// Vercel serverless function handler - export Express app directly
+// Vercel will automatically handle Express apps
 export default app;
 

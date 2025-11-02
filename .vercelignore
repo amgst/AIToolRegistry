@@ -1,0 +1,8 @@
+# Vercel ignore file - exclude local development files
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal
+dist/index.js
+server/
+!api/
+

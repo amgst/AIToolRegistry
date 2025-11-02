@@ -1,8 +1,7 @@
 // Vercel Cron Job handler for scheduled scraping
-import type { Request, Response } from "express";
-
-export default async function handler(req: Request, res: Response) {
-  if (req.method !== "GET") {
+// Vercel cron jobs call this endpoint automatically
+export default async function handler(req: any, res: any) {
+  if (req.method && req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
