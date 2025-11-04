@@ -2,7 +2,6 @@
 // Note: server/ and shared/ are copied to api/server/ and api/shared/ during build
 import { storage } from "./server/storage.js";
 import { scraperManager } from "./server/scrapers/scraper-manager.js";
-import { sourcesStorage } from "./server/scrapers/sources-storage.js";
 import type { InsertAiTool } from "./shared/schema.js";
 
 async function performImport() {
@@ -12,26 +11,17 @@ async function performImport() {
   try {
     console.log(`🚀 Starting import from Aitoolnet.com (limit: ${limit})...`);
 
-    // Check if aitoolnet source exists, if not create it
-    let aitoolnetSource = sourcesStorage.getAllSources().find(s => s.type === "aitoolnet");
-    
-    if (!aitoolnetSource) {
-      aitoolnetSource = {
-        id: "aitoolnet-default",
-        name: "Aitoolnet.com",
-        type: "aitoolnet",
-        url: "https://www.aitoolnet.com/",
-        enabled: true,
-        limit: limit,
-        concurrency: 10,
-      };
-      sourcesStorage.saveSource(aitoolnetSource);
-    } else {
-      // Update limit
-      aitoolnetSource.limit = limit;
-      aitoolnetSource.concurrency = 10;
-      sourcesStorage.saveSource(aitoolnetSource);
-    }
+    // Create source configuration for scraping
+    // We don't need to persist this - just use it for this import
+    const aitoolnetSource = {
+      id: "aitoolnet-import-temp",
+      name: "Aitoolnet.com",
+      type: "aitoolnet" as const,
+      url: "https://www.aitoolnet.com/",
+      enabled: true,
+      limit: limit,
+      concurrency: 10,
+    };
 
     console.log(`🔍 Scraping tools from Aitoolnet.com...`);
     const scrapeResult = await scraperManager.scrape(aitoolnetSource);
