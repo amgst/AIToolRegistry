@@ -80,9 +80,7 @@ export default function AdminToolsList() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest(`/api/tools/${id}`, {
-        method: "DELETE",
-      });
+      const response = await apiRequest("DELETE", `/api/tools/${id}`);
       return response;
     },
     onSuccess: () => {
@@ -105,10 +103,7 @@ export default function AdminToolsList() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertAiTool> }) => {
-      const response = await apiRequest(`/api/tools/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("PATCH", `/api/tools/${id}`, data);
       return response;
     },
     onSuccess: () => {
