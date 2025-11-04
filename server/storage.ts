@@ -1,6 +1,4 @@
-import { aiTools, type AiTool, type InsertAiTool } from "@shared/schema";
-// Don't import db directly - use getDb() dynamically to avoid eager initialization
-import { eq, ilike, or, sql } from "drizzle-orm";
+﻿import type { AiTool, InsertAiTool } from "@shared/schema";
 
 export interface IStorage {
   getAllTools(): Promise<AiTool[]>;
@@ -15,7 +13,6 @@ export interface IStorage {
   deleteTool(id: string): Promise<boolean>;
 }
 
-// Normalize URL for comparison (remove protocol, www, trailing slashes, etc.)
 function normalizeWebsiteUrl(url: string): string {
   if (!url) return "";
   try {
@@ -25,74 +22,74 @@ function normalizeWebsiteUrl(url: string): string {
     normalized += u.search || "";
     return normalized.toLowerCase();
   } catch {
-    // If URL is invalid, just lowercase and strip whitespace
     return url.toLowerCase().trim();
   }
 }
 
+const COLLECTION_NAME = "ai_tools";
+
 export class DatabaseStorage implements IStorage {
   async getAllTools(): Promise<AiTool[]> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
-      const tools = await dbInstance.select().from(aiTools);
-      // Convert JSON strings back to arrays
-      return tools.map(this.parseTool);
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      const snapshot = await db.collection(COLLECTION_NAME).get();
+      const tools: AiTool[] = [];
+      snapshot.forEach((doc) => {
+        tools.push(this.parseTool({ id: doc.id, ...doc.data() }));
+      });
+      return tools;
     } catch (error) {
-      // If database is unavailable (e.g., on Vercel without PostgreSQL), return empty array
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        console.warn("Database unavailable, returning empty array:", errorMessage);
-        return [];
-      }
-      throw error;
+      console.warn("Firestore error:", error);
+      return [];
     }
   }
   
-  private parseTool(tool: any): AiTool {
+  private parseTool(doc: any): AiTool {
     return {
-      ...tool,
-      features: Array.isArray(tool.features) ? tool.features : JSON.parse(tool.features || "[]"),
-      tags: Array.isArray(tool.tags) ? tool.tags : JSON.parse(tool.tags || "[]"),
-      socialLinks: typeof tool.socialLinks === "object" && tool.socialLinks !== null
-        ? tool.socialLinks
-        : JSON.parse(tool.socialLinks || "{}"),
-      useCases: Array.isArray(tool.useCases) ? tool.useCases : JSON.parse(tool.useCases || "[]"),
-      screenshots: Array.isArray(tool.screenshots) ? tool.screenshots : JSON.parse(tool.screenshots || "[]"),
-      pricingDetails: typeof tool.pricingDetails === "object" && tool.pricingDetails !== null
-        ? tool.pricingDetails
-        : JSON.parse(tool.pricingDetails || "{}"),
+      id: doc.id,
+      slug: doc.slug || "",
+      name: doc.name || "",
+      description: doc.description || "",
+      shortDescription: doc.shortDescription || doc.short_description || "",
+      category: doc.category || "",
+      pricing: doc.pricing || "Unknown",
+      websiteUrl: doc.websiteUrl || doc.website_url || "",
+      logoUrl: doc.logoUrl || doc.logo_url || undefined,
+      features: Array.isArray(doc.features) ? doc.features : [],
+      tags: Array.isArray(doc.tags) ? doc.tags : [],
+      badge: doc.badge || undefined,
+      rating: doc.rating || undefined,
+      sourceDetailUrl: doc.sourceDetailUrl || doc.source_detail_url || undefined,
+      developer: doc.developer || undefined,
+      documentationUrl: doc.documentationUrl || doc.documentation_url || undefined,
+      socialLinks: typeof doc.socialLinks === "object" && doc.socialLinks !== null ? doc.socialLinks : (typeof doc.social_links === "object" && doc.social_links !== null ? doc.social_links : {}),
+      useCases: Array.isArray(doc.useCases) ? doc.useCases : (Array.isArray(doc.use_cases) ? doc.use_cases : []),
+      screenshots: Array.isArray(doc.screenshots) ? doc.screenshots : [],
+      pricingDetails: typeof doc.pricingDetails === "object" && doc.pricingDetails !== null ? doc.pricingDetails : (typeof doc.pricing_details === "object" && doc.pricing_details !== null ? doc.pricing_details : {}),
+      launchDate: doc.launchDate || doc.launch_date || undefined,
+      lastUpdated: doc.lastUpdated || doc.last_updated || new Date().toISOString(),
     };
   }
 
   async getToolById(id: string): Promise<AiTool | undefined> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
-      const [tool] = await dbInstance.select().from(aiTools).where(eq(aiTools.id, id));
-      return tool ? this.parseTool(tool) : undefined;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        return undefined;
-      }
-      throw error;
-    }
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      const doc = await db.collection(COLLECTION_NAME).doc(id).get();
+      if (!doc.exists) return undefined;
+      return this.parseTool({ id: doc.id, ...doc.data() });
+    } catch { return undefined; }
   }
 
   async getToolBySlug(slug: string): Promise<AiTool | undefined> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
-      const [tool] = await dbInstance.select().from(aiTools).where(eq(aiTools.slug, slug));
-      return tool ? this.parseTool(tool) : undefined;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        return undefined;
-      }
-      throw error;
-    }
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      const snapshot = await db.collection(COLLECTION_NAME).where("slug", "==", slug).limit(1).get();
+      if (snapshot.empty) return undefined;
+      return this.parseTool({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+    } catch { return undefined; }
   }
 
   async getToolByWebsiteUrl(websiteUrl: string): Promise<AiTool | undefined> {
@@ -101,191 +98,81 @@ export class DatabaseStorage implements IStorage {
     return allTools.find(tool => normalizeWebsiteUrl(tool.websiteUrl) === normalized);
   }
 
-  // Check for duplicates by both slug and website URL
   async findDuplicateTool(slug: string, websiteUrl: string): Promise<AiTool | undefined> {
-    // First check by slug (most reliable)
     const bySlug = await this.getToolBySlug(slug);
     if (bySlug) return bySlug;
-    
-    // Then check by website URL (catches tools with different slugs but same website)
     if (websiteUrl) {
       const byUrl = await this.getToolByWebsiteUrl(websiteUrl);
       if (byUrl) return byUrl;
     }
-    
     return undefined;
   }
 
   async searchTools(query: string): Promise<AiTool[]> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
       const lowerQuery = query.toLowerCase();
-      const tools = await dbInstance
-        .select()
-        .from(aiTools)
-        .where(
-          or(
-            sql`LOWER(${aiTools.name}) LIKE ${`%${lowerQuery}%`}`,
-            sql`LOWER(${aiTools.shortDescription}) LIKE ${`%${lowerQuery}%`}`,
-            sql`LOWER(${aiTools.description}) LIKE ${`%${lowerQuery}%`}`
-          )
-        );
-      return tools.map(this.parseTool);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        return [];
-      }
-      throw error;
-    }
+      const allTools = await this.getAllTools();
+      return allTools.filter(tool => 
+        tool.name.toLowerCase().includes(lowerQuery) ||
+        tool.shortDescription?.toLowerCase().includes(lowerQuery) ||
+        tool.description?.toLowerCase().includes(lowerQuery) ||
+        tool.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
+      );
+    } catch { return []; }
   }
 
   async getToolsByCategory(category: string): Promise<AiTool[]> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
+      const allTools = await this.getAllTools();
       const lowerCategory = category.toLowerCase();
-      const tools = await dbInstance
-        .select()
-        .from(aiTools)
-        .where(sql`LOWER(${aiTools.category}) LIKE ${`%${lowerCategory}%`}`);
-      return tools.map(this.parseTool);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        return [];
-      }
-      throw error;
-    }
+      return allTools.filter(tool => tool.category.toLowerCase().includes(lowerCategory));
+    } catch { return []; }
   }
 
   async createTool(insertTool: InsertAiTool): Promise<AiTool> {
-    const { getDb } = await import("./db");
-    const dbInstance = await getDb();
-    // Check for PostgreSQL using same logic as db.ts
-    const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL 
-      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
-      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
-    const usePostgres = !!pgUrl;
-    
-    // For SQLite: Convert arrays/objects to JSON strings
-    // For PostgreSQL: Keep as arrays/objects (jsonb handles them natively)
-    const values: any = { ...insertTool };
-    
-    if (!usePostgres) {
-      // SQLite mode - stringify JSON fields
-      values.features = Array.isArray(insertTool.features) 
-        ? JSON.stringify(insertTool.features) 
-        : insertTool.features;
-      values.tags = Array.isArray(insertTool.tags) 
-        ? JSON.stringify(insertTool.tags) 
-        : insertTool.tags;
-      
-      if (insertTool.socialLinks !== undefined) {
-        values.socialLinks = typeof insertTool.socialLinks === "object"
-          ? JSON.stringify(insertTool.socialLinks)
-          : insertTool.socialLinks;
-      }
-      if (insertTool.useCases !== undefined) {
-        values.useCases = Array.isArray(insertTool.useCases)
-          ? JSON.stringify(insertTool.useCases)
-          : insertTool.useCases;
-      }
-      if (insertTool.screenshots !== undefined) {
-        values.screenshots = Array.isArray(insertTool.screenshots)
-          ? JSON.stringify(insertTool.screenshots)
-          : insertTool.screenshots;
-      }
-      if (insertTool.pricingDetails !== undefined) {
-        values.pricingDetails = typeof insertTool.pricingDetails === "object"
-          ? JSON.stringify(insertTool.pricingDetails)
-          : insertTool.pricingDetails;
-      }
+    const { getDb } = await import("./db.js");
+    const db = await getDb();
+    const id = crypto.randomUUID();
+    const toolData: any = {
+      id, slug: insertTool.slug, name: insertTool.name, description: insertTool.description,
+      shortDescription: insertTool.shortDescription, category: insertTool.category, pricing: insertTool.pricing,
+      websiteUrl: insertTool.websiteUrl, logoUrl: insertTool.logoUrl || null, features: insertTool.features || [],
+      tags: insertTool.tags || [], badge: insertTool.badge || null, rating: insertTool.rating || null,
+      sourceDetailUrl: insertTool.sourceDetailUrl || null, developer: insertTool.developer || null,
+      documentationUrl: insertTool.documentationUrl || null, socialLinks: insertTool.socialLinks || {},
+      useCases: insertTool.useCases || [], screenshots: insertTool.screenshots || [],
+      pricingDetails: insertTool.pricingDetails || {}, launchDate: insertTool.launchDate || null,
+      lastUpdated: new Date().toISOString(),
+    };
+    const cleanData: any = {};
+    for (const [key, value] of Object.entries(toolData)) {
+      if (value !== undefined) cleanData[key] = value;
     }
-    // For PostgreSQL, arrays/objects are kept as-is (jsonb handles them)
-    
-    // Set lastUpdated timestamp
-    values.lastUpdated = new Date().toISOString();
-    
-    const [tool] = await dbInstance
-      .insert(aiTools)
-      .values(values)
-      .returning();
-    return this.parseTool(tool);
+    await db.collection(COLLECTION_NAME).doc(id).set(cleanData);
+    return this.parseTool({ id, ...cleanData });
   }
 
   async updateTool(id: string, updateData: Partial<InsertAiTool>): Promise<AiTool | undefined> {
-    const { getDb } = await import("./db");
-    const dbInstance = await getDb();
-    // Check for PostgreSQL using same logic as db.ts
-    const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL 
-      || process.env['ai_POSTGRES_URL'] || process.env['a1_POSTGRES_URL']
-      || process.env['ai_DATABASE_URL'] || process.env['a1_DATABASE_URL'];
-    const usePostgres = !!pgUrl;
-    
-    // For SQLite: Convert arrays/objects to JSON strings
-    // For PostgreSQL: Keep as arrays/objects
-    const values: any = { ...updateData };
-    
-    if (!usePostgres) {
-      // SQLite mode - stringify JSON fields
-      if (Array.isArray(updateData.features)) {
-        values.features = JSON.stringify(updateData.features);
+    try {
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      const updateFields: any = { ...updateData, lastUpdated: new Date().toISOString() };
+      const cleanUpdate: any = {};
+      for (const [key, value] of Object.entries(updateFields)) {
+        if (value !== undefined) cleanUpdate[key] = value;
       }
-      if (Array.isArray(updateData.tags)) {
-        values.tags = JSON.stringify(updateData.tags);
-      }
-      if (updateData.socialLinks !== undefined) {
-        values.socialLinks = typeof updateData.socialLinks === "object"
-          ? JSON.stringify(updateData.socialLinks)
-          : updateData.socialLinks;
-      }
-      if (updateData.useCases !== undefined) {
-        values.useCases = Array.isArray(updateData.useCases)
-          ? JSON.stringify(updateData.useCases)
-          : updateData.useCases;
-      }
-      if (updateData.screenshots !== undefined) {
-        values.screenshots = Array.isArray(updateData.screenshots)
-          ? JSON.stringify(updateData.screenshots)
-          : updateData.screenshots;
-      }
-      if (updateData.pricingDetails !== undefined) {
-        values.pricingDetails = typeof updateData.pricingDetails === "object"
-          ? JSON.stringify(updateData.pricingDetails)
-          : updateData.pricingDetails;
-      }
-    }
-    // For PostgreSQL, arrays/objects are kept as-is
-    
-    // Update lastUpdated timestamp
-    values.lastUpdated = new Date().toISOString();
-    
-    const [tool] = await dbInstance
-      .update(aiTools)
-      .set(values)
-      .where(eq(aiTools.id, id))
-      .returning();
-    return tool ? this.parseTool(tool) : undefined;
+      await db.collection(COLLECTION_NAME).doc(id).update(cleanUpdate);
+      return await this.getToolById(id);
+    } catch { return undefined; }
   }
 
   async deleteTool(id: string): Promise<boolean> {
     try {
-      const { getDb } = await import("./db");
-      const dbInstance = await getDb();
-      const result = await dbInstance
-        .delete(aiTools)
-        .where(eq(aiTools.id, id))
-        .returning();
-      return result.length > 0;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("Vercel") || errorMessage.includes("Database unavailable")) {
-        return false;
-      }
-      throw error;
-    }
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      await db.collection(COLLECTION_NAME).doc(id).delete();
+      return true;
+    } catch { return false; }
   }
 }
 

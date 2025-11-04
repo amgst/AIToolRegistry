@@ -1,120 +1,71 @@
-// Database connection - supports both SQLite (local) and PostgreSQL (Vercel)
-// Don't import schema at top level - import dynamically to avoid module load issues
+// Firebase Firestore database connection
+import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-// Helper function to get PostgreSQL connection string
-// Checks both standard and prefixed environment variable names (Neon/Vercel may use prefixes)
-function getPostgresUrl(): string | undefined {
-  // Check standard names first
-  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  
-  // Check common prefixes (Neon/Vercel may add prefixes like ai_, a1_, etc.)
-  const prefixes = ['ai_', 'a1_', 'POSTGRES_', 'DB_'];
-  for (const prefix of prefixes) {
-    if (process.env[`${prefix}POSTGRES_URL`]) return process.env[`${prefix}POSTGRES_URL`];
-    if (process.env[`${prefix}DATABASE_URL`]) return process.env[`${prefix}DATABASE_URL`];
-  }
-  
-  return undefined;
-}
+let dbInstance: Firestore | null = null;
+let app: App | null = null;
 
-// Check if we should use PostgreSQL (Vercel Postgres)
-const usePostgres = !!getPostgresUrl();
-
-let dbInstance: any;
-let dbInitialized = false;
-let dbError: Error | null = null;
-
-async function initializeDatabase() {
-  if (dbInitialized) {
-    if (dbError) throw dbError;
+export async function getDb(): Promise<Firestore> {
+  if (dbInstance) {
     return dbInstance;
   }
-  
-  dbInitialized = true;
-  
+
   try {
-    if (usePostgres) {
-      // PostgreSQL mode (Vercel Postgres)
-      const connectionString = getPostgresUrl();
-      
-      if (!connectionString) {
-        throw new Error("POSTGRES_URL or DATABASE_URL (or prefixed variants like ai_POSTGRES_URL) environment variable is required for PostgreSQL");
-      }
-      
-      // Use Neon serverless driver for Vercel (works with connection pooling)
-      const { neon } = await import("@neondatabase/serverless");
-      const { drizzle: drizzlePostgres } = await import("drizzle-orm/neon-http");
-      
-      const sql = neon(connectionString);
-      
-      // Dynamically import schema to avoid module load issues
-      const schemaModule = await import("@shared/schema");
-      dbInstance = drizzlePostgres(sql, { schema: schemaModule });
-      
-      console.log("✅ Connected to PostgreSQL (Vercel Postgres)");
+    // Check if Firebase Admin is already initialized
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      app = existingApps[0];
     } else {
-      // SQLite mode (local development)
-      const Database = (await import("better-sqlite3")).default;
-      const { drizzle: drizzleSQLite } = await import("drizzle-orm/better-sqlite3");
-      const path = await import("path");
-      const fs = await import("fs");
+      // Initialize Firebase Admin SDK
+      // For Vercel/serverless, we'll use Application Default Credentials
+      // Or we can use environment variables for credentials
       
-      const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "database.sqlite");
-      const dbDir = path.dirname(dbPath);
-      
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
+      // Try to use service account from environment variables
+      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
+        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+        : null;
+
+      if (serviceAccount) {
+        app = initializeApp({
+          credential: cert(serviceAccount),
+          projectId: process.env.FIREBASE_PROJECT_ID || "ai-directory-6e37e",
+        });
+      } else {
+        // Use default credentials (works if running on Firebase/Google Cloud)
+        // For local dev, you might need to set GOOGLE_APPLICATION_CREDENTIALS
+        app = initializeApp({
+          projectId: process.env.FIREBASE_PROJECT_ID || "ai-directory-6e37e",
+        });
       }
-      
-      const sqlite = new Database(dbPath);
-      sqlite.pragma("journal_mode = WAL");
-      
-      // Dynamically import schema to avoid module load issues
-      const schemaModule = await import("@shared/schema");
-      dbInstance = drizzleSQLite(sqlite, { schema: schemaModule });
-      
-      console.log("✅ Connected to SQLite (local development)");
     }
+
+    dbInstance = getFirestore(app);
+    console.log("✅ Connected to Firebase Firestore");
     
     return dbInstance;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("❌ Database initialization failed:", errorMessage);
-    dbError = error instanceof Error ? error : new Error(String(error));
-    throw dbError;
+    console.error("❌ Firebase initialization failed:", errorMessage);
+    throw new Error(`Firebase initialization failed: ${errorMessage}`);
   }
 }
 
-// Initialize database eagerly - this will be called when module loads
-// In serverless, this won't crash because we catch errors gracefully
-let cachedDb: any = null;
-
-// Get the database instance - use this in storage methods
-export async function getDb() {
-  if (!cachedDb) {
-    cachedDb = await initializeDatabase();
-  }
-  return cachedDb;
-}
-
-// For backwards compatibility, export db as a getter
-// Storage methods should use: const db = await getDb();
+// For backwards compatibility
 export const db = {
   async select() {
     const dbInstance = await getDb();
-    return dbInstance.select();
+    return dbInstance;
   },
-  async insert(table: any) {
+  async insert() {
     const dbInstance = await getDb();
-    return dbInstance.insert(table);
+    return dbInstance;
   },
-  async update(table: any) {
+  async update() {
     const dbInstance = await getDb();
-    return dbInstance.update(table);
+    return dbInstance;
   },
-  async delete(table: any) {
+  async delete() {
     const dbInstance = await getDb();
-    return dbInstance.delete(table);
+    return dbInstance;
   }
 };
