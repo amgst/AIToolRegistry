@@ -137,9 +137,9 @@ async function performImport() {
 
 export default async function handler(req: any, res: any) {
   try {
-    // Only allow POST requests
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    // Allow both GET (for easy testing) and POST requests
+    if (req.method !== 'POST' && req.method !== 'GET') {
+      return res.status(405).json({ error: 'Method not allowed. Use POST or GET.' });
     }
 
     // Optional: Add basic authentication check
