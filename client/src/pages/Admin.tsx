@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Pencil, Trash2, Download, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { AdminNavbar } from "@/components/AdminNavbar";
 import {
   Dialog,
   DialogContent,
@@ -449,30 +449,16 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">AI</span>
-              </div>
-              <span className="font-bold text-xl">AI Tools Directory - Admin</span>
-            </div>
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+    <div className="min-h-screen bg-background">
+      <AdminNavbar />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <Link href="/">
-              <Button variant="ghost" data-testid="button-back-home">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Home
-              </Button>
-            </Link>
+            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage tools, scrape sources, and import data
+            </p>
           </div>
           <Button
             onClick={() => {
