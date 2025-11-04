@@ -149,10 +149,49 @@ app.get("/api/health", async (req, res) => {
     let errorMessage = null;
     
     try {
-      // Try both paths - during build server files are copied to api/server
-      const { getDb } = await import("./server/db").catch(() => import("../server/db"));
-      // Try shared paths - copied to api/shared during build
-      const { aiTools } = await import("./shared/schema").catch(() => import("@shared/schema").catch(() => import("../shared/schema")));
+      // During build, server and shared files are copied to api/server/ and api/shared/
+      // Use .js extensions for ESM imports (Vercel compiles TS to JS)
+      let getDb, aiTools;
+      try {
+        const dbModule = await import("./server/db.js");
+        getDb = dbModule.getDb;
+      } catch (firstError) {
+        try {
+          const dbModule = await import("./server/db");
+          getDb = dbModule.getDb;
+        } catch (secondError) {
+          try {
+            const dbModule = await import("../server/db");
+            getDb = dbModule.getDb;
+          } catch (thirdError) {
+            console.error("Failed to import db from all paths:", firstError, secondError, thirdError);
+            throw new Error("Cannot find server/db module");
+          }
+        }
+      }
+      
+      try {
+        const schemaModule = await import("./shared/schema.js");
+        aiTools = schemaModule.aiTools;
+      } catch (firstError) {
+        try {
+          const schemaModule = await import("./shared/schema");
+          aiTools = schemaModule.aiTools;
+        } catch (secondError) {
+          try {
+            const schemaModule = await import("@shared/schema");
+            aiTools = schemaModule.aiTools;
+          } catch (thirdError) {
+            try {
+              const schemaModule = await import("../shared/schema");
+              aiTools = schemaModule.aiTools;
+            } catch (fourthError) {
+              console.error("Failed to import schema from all paths:", firstError, secondError, thirdError, fourthError);
+              throw new Error("Cannot find shared/schema module");
+            }
+          }
+        }
+      }
       const dbInstance = await getDb();
       const tools = await dbInstance.select().from(aiTools).limit(1);
       dbConnected = true;
@@ -230,9 +269,24 @@ async function initialize() {
   
   initPromise = (async () => {
     try {
-      // Dynamically import routes to avoid module load issues
-      // Try both paths - during build server files are copied to api/server
-      const { registerRoutes } = await import("./server/routes").catch(() => import("../server/routes"));
+      // During build, server files are copied to api/server/
+      // Try the copied location first (primary path) - must use .js extension for ESM
+      let registerRoutes;
+      try {
+        const module = await import("./server/routes.js");
+        registerRoutes = module.registerRoutes;
+      } catch (firstError) {
+        // Fallback: try original location with .js extension (for local dev or different build structure)
+        try {
+          const module = await import("../server/routes.js");
+          registerRoutes = module.registerRoutes;
+        } catch (secondError) {
+          console.error("Failed to import routes from all paths:");
+          console.error("Primary (./server/routes.js):", firstError);
+          console.error("Fallback (../server/routes.js):", secondError);
+          throw new Error(`Cannot find server/routes module. Make sure copy-server script ran during build. Primary error: ${firstError instanceof Error ? firstError.message : String(firstError)}`);
+        }
+      }
       await registerRoutes(app);
       
       // Add static file serving in production (after routes)
