@@ -21,6 +21,27 @@ function fixImports(content, fileRelativePath) {
   content = content.replace(/from ["']@shared\//g, `from "${sharedPath}/`);
   content = content.replace(/from ["']@shared["']/g, `from "${sharedPath}"`);
   
+  // Fix relative imports to add .js extensions for ESM compatibility
+  // This handles imports like: from "./storage", from "./scrapers/scraper-manager", etc.
+  // Pattern: matches "./something" or "../something" but not "./something.js" or "../something/index"
+  content = content.replace(
+    /from ["'](\.\.?\/[^"']+?)["']/g,
+    (match, importPath) => {
+      // Don't modify if it already ends with .js, .ts, .json, or has a query string
+      // Also don't modify if it ends with /index (index.js will be resolved automatically)
+      if (importPath.endsWith('.js') || 
+          importPath.endsWith('.ts') || 
+          importPath.endsWith('.json') ||
+          importPath.includes('?') ||
+          importPath.endsWith('/index') ||
+          importPath.endsWith('/index.js')) {
+        return match;
+      }
+      // Add .js extension for ESM
+      return match.replace(importPath, importPath + '.js');
+    }
+  );
+  
   return content;
 }
 
@@ -55,11 +76,11 @@ function copyDir(src, dest, relativePath = '') {
 try {
   console.log('Copying server/ to api/server/...');
   copyDir(path.join(rootDir, 'server'), path.join(rootDir, 'api', 'server'));
-  console.log('✅ Copied server/ to api/server/');
+  console.log('✓ Copied server/ to api/server/');
   
   console.log('Copying shared/ to api/shared/...');
   copyDir(path.join(rootDir, 'shared'), path.join(rootDir, 'api', 'shared'));
-  console.log('✅ Copied shared/ to api/shared/');
+  console.log('✓ Copied shared/ to api/shared/');
 } catch (error) {
   console.error('❌ Error copying files:', error);
   process.exit(1);
