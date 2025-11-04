@@ -1,24 +1,11 @@
 // Vercel serverless function to import tools from Aitoolnet.com
-import { storage } from "../server/storage.js";
-import { scraperManager } from "../server/scrapers/scraper-manager.js";
-import { sourcesStorage } from "../server/scrapers/sources-storage.js";
-import type { InsertAiTool } from "../shared/schema.js";
+// Note: server/ and shared/ are copied to api/server/ and api/shared/ during build
+import { storage } from "./server/storage.js";
+import { scraperManager } from "./server/scrapers/scraper-manager.js";
+import { sourcesStorage } from "./server/scrapers/sources-storage.js";
+import type { InsertAiTool } from "./shared/schema.js";
 
-export default async function handler(req: any, res: any) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed. Use POST.' });
-    return;
-  }
-
-  // Optional: Add basic authentication check
-  const authToken = req.headers?.authorization?.replace('Bearer ', '');
-  const expectedToken = process.env.IMPORT_TOKEN;
-  if (expectedToken && authToken !== expectedToken) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
+async function performImport() {
   const limit = 500; // Import 500 tools
   const startTime = Date.now();
 
@@ -50,11 +37,7 @@ export default async function handler(req: any, res: any) {
     const scrapeResult = await scraperManager.scrape(aitoolnetSource);
 
     if (!scrapeResult.success) {
-      res.status(500).json({
-        error: "Scraping failed",
-        details: scrapeResult.errors,
-      });
-      return;
+      throw new Error(`Scraping failed: ${scrapeResult.errors?.join(', ') || 'Unknown error'}`);
     }
 
     console.log(`📦 Found ${scrapeResult.items.length} tools to process`);
@@ -142,15 +125,41 @@ export default async function handler(req: any, res: any) {
 
     console.log(`✅ Import complete: ${totalInserted} inserted, ${totalSkipped} skipped, ${totalErrors} errors`);
 
-    res.status(200).json(result);
+    return result;
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`❌ Fatal error during import: ${errorMsg}`);
-    
-    res.status(500).json({
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error(`❌ Fatal error during import: ${errorMsg}`, errorStack);
+    throw error; // Re-throw to be caught by handler
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  try {
+    // Only allow POST requests
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    }
+
+    // Optional: Add basic authentication check
+    const authToken = req.headers?.authorization?.replace('Bearer ', '');
+    const expectedToken = process.env.IMPORT_TOKEN;
+    if (expectedToken && authToken !== expectedToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await performImport();
+    return res.status(200).json(result);
+
+  } catch (handlerError) {
+    const errorMsg = handlerError instanceof Error ? handlerError.message : String(handlerError);
+    const errorStack = handlerError instanceof Error ? handlerError.stack : undefined;
+    console.error(`❌ Handler error: ${errorMsg}`, errorStack);
+    return res.status(500).json({
       error: "Import failed",
       message: errorMsg,
+      ...(process.env.NODE_ENV === 'development' && errorStack ? { stack: errorStack } : {}),
     });
   }
 }
