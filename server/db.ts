@@ -21,9 +21,18 @@ export async function getDb(): Promise<Firestore> {
       // Or we can use environment variables for credentials
       
       // Try to use service account from environment variables
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-        : null;
+      let serviceAccount = null;
+      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+          // Handle both JSON string and already parsed object
+          const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT;
+          serviceAccount = typeof serviceAccountStr === 'string' 
+            ? JSON.parse(serviceAccountStr) 
+            : serviceAccountStr;
+        } catch (parseError) {
+          console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT:", parseError);
+        }
+      }
 
       if (serviceAccount) {
         app = initializeApp({
@@ -31,8 +40,8 @@ export async function getDb(): Promise<Firestore> {
           projectId: process.env.FIREBASE_PROJECT_ID || "ai-directory-6e37e",
         });
       } else {
-        // Use default credentials (works if running on Firebase/Google Cloud)
-        // For local dev, you might need to set GOOGLE_APPLICATION_CREDENTIALS
+        // Try using Application Default Credentials (works on Google Cloud)
+        // For Vercel, you MUST provide FIREBASE_SERVICE_ACCOUNT
         app = initializeApp({
           projectId: process.env.FIREBASE_PROJECT_ID || "ai-directory-6e37e",
         });
