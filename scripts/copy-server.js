@@ -22,10 +22,30 @@ function fixImports(content, fileRelativePath) {
   content = content.replace(/from ["']@shared["']/g, `from "${sharedPath}"`);
   
   // Fix relative imports to add .js extensions for ESM compatibility
-  // This handles imports like: from "./storage", from "./scrapers/scraper-manager", etc.
-  // Pattern: matches "./something" or "../something" but not "./something.js" or "../something/index"
+  // This handles both static imports (from "...") and dynamic imports (import("..."))
+  
+  // Fix static imports: from "./storage", from "./scrapers/scraper-manager", etc.
   content = content.replace(
     /from ["'](\.\.?\/[^"']+?)["']/g,
+    (match, importPath) => {
+      // Don't modify if it already ends with .js, .ts, .json, or has a query string
+      // Also don't modify if it ends with /index (index.js will be resolved automatically)
+      if (importPath.endsWith('.js') || 
+          importPath.endsWith('.ts') || 
+          importPath.endsWith('.json') ||
+          importPath.includes('?') ||
+          importPath.endsWith('/index') ||
+          importPath.endsWith('/index.js')) {
+        return match;
+      }
+      // Add .js extension for ESM
+      return match.replace(importPath, importPath + '.js');
+    }
+  );
+  
+  // Fix dynamic imports: await import("./db"), import("./schema"), etc.
+  content = content.replace(
+    /import\(["'](\.\.?\/[^"']+?)["']\)/g,
     (match, importPath) => {
       // Don't modify if it already ends with .js, .ts, .json, or has a query string
       // Also don't modify if it ends with /index (index.js will be resolved automatically)
