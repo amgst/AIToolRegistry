@@ -39,7 +39,15 @@ export class AitoolnetScraper extends BaseScraper {
             "https://www.aitoolnet.com/popular",
             "https://www.aitoolnet.com/latest",
             "https://www.aitoolnet.com/ranking",
-            // Add category pages if needed
+            // Add some common category pages for more tool discovery
+            "https://www.aitoolnet.com/text-to-speech",
+            "https://www.aitoolnet.com/copywriting",
+            "https://www.aitoolnet.com/image-generator",
+            "https://www.aitoolnet.com/video-generator",
+            "https://www.aitoolnet.com/code-assistant",
+            "https://www.aitoolnet.com/writing-assistant",
+            "https://www.aitoolnet.com/chatbot",
+            "https://www.aitoolnet.com/productivity",
           ]
         : [url];
 
