@@ -13,12 +13,6 @@ export class AitoolnetScraper extends BaseScraper {
     const results: Partial<InsertAiTool>[] = [];
 
     try {
-      // Fetch the listing page
-      const listResp = await this.fetchWithRetry(url);
-      const listHtml = await listResp.text();
-      const $list = load(listHtml);
-
-      // Find candidate detail page URLs
       const candidateHrefs = new Set<string>();
       
       const isLikelyDetailPath = (pathname: string): boolean => {
@@ -36,30 +30,56 @@ export class AitoolnetScraper extends BaseScraper {
         if (segments[0] === "ai-tools" && segments.length >= 2) return true;
         return false;
       };
+      
+      // For large imports (limit >= 1000), also scrape from additional pages
+      const pagesToScrape = limit >= 1000 
+        ? [
+            url,
+            "https://www.aitoolnet.com/popular",
+            "https://www.aitoolnet.com/latest",
+            "https://www.aitoolnet.com/ranking",
+            // Add category pages if needed
+          ]
+        : [url];
 
-      $list("a[href]").each((_i, el) => {
-        const href = $list(el).attr("href") || "";
-        const text = $list(el).text().trim();
-        if (!href) return;
+      // Fetch multiple pages to discover more tools
+      for (const pageUrl of pagesToScrape) {
+        try {
+          const listResp = await this.fetchWithRetry(pageUrl);
+          const listHtml = await listResp.text();
+          const $list = load(listHtml);
 
-        const full = this.normalizeUrl(href, url);
+          // Find candidate detail page URLs from this page
+          $list("a[href]").each((_i, el) => {
+            const href = $list(el).attr("href") || "";
+            const text = $list(el).text().trim();
+            if (!href) return;
+
+            const full = this.normalizeUrl(href, pageUrl);
         if (!full) return;
 
-        try {
-          const u = new URL(full);
-          if (!u.hostname.includes("aitoolnet.com")) return;
-          if (u.pathname === "/" || u.pathname.length < 3) return;
-          if (!isLikelyDetailPath(u.pathname)) return;
-          if (text.length >= 2) {
-            candidateHrefs.add(full);
-          }
-        } catch {
-          // Skip invalid URLs
+            try {
+              const u = new URL(full);
+              if (!u.hostname.includes("aitoolnet.com")) return;
+              if (u.pathname === "/" || u.pathname.length < 3) return;
+              if (!isLikelyDetailPath(u.pathname)) return;
+              if (text.length >= 2) {
+                candidateHrefs.add(full);
+              }
+            } catch {
+              // Skip invalid URLs
+            }
+          });
+        } catch (pageError) {
+          errors.push(`Error fetching ${pageUrl}: ${String(pageError)}`);
         }
-      });
+      }
 
-      // Allow up to 500 candidates for large imports
-      const candidates = Array.from(candidateHrefs).slice(0, Math.max(1, Math.min(500, limit)));
+      // Remove limit restriction for large imports (allow all discovered tools)
+      // If limit is very high (>= 1000), don't restrict - scrape all discovered tools
+      const candidates = limit >= 1000 
+        ? Array.from(candidateHrefs) 
+        : Array.from(candidateHrefs).slice(0, Math.max(1, Math.min(500, limit)));
 
       // Scrape detail pages concurrently
       await this.fetchConcurrently(

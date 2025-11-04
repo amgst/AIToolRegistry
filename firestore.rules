@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // AI Tools Collection - Open for public read, restricted write
+    match /ai_tools/{toolId} {
+      // Allow anyone to read tools (public access)
+      allow read: if true;
+      
+      // Write access: Only allow writes from server-side (Admin SDK)
+      // Client-side writes are blocked for security
+      // All writes must go through your backend API
+      allow write: if false;
+    }
+    
+    // Default: Deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

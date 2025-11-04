@@ -9,9 +9,11 @@
     "copy-server": "tsx scripts/copy-server.js",
     "build:local": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
-    "seed": "cross-env NODE_ENV=development tsx server/seed.ts --limit=25",
-    "check": "tsc",
-    "db:push": "drizzle-kit push"
+          "seed": "cross-env NODE_ENV=development tsx server/seed.ts --limit=25",
+      "migrate:firestore": "cross-env NODE_ENV=development tsx server/migrate-to-firestore.ts",
+      "import:aitoolnet": "cross-env NODE_ENV=development tsx server/import-all-aitoolnet.ts",
+      "check": "tsc",
+      "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

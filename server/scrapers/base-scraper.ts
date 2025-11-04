@@ -22,7 +22,7 @@ export interface ScraperConfig {
 export abstract class BaseScraper {
   protected defaultConcurrency = 5;
   protected defaultLimit = 25;
-  protected maxLimit = 500; // Maximum tools per scrape
+  protected maxLimit = 50000; // Maximum tools per scrape (increased for full imports)
   protected defaultTimeout = 30000; // 30 seconds
 
   abstract name: string;

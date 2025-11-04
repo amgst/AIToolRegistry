@@ -9,6 +9,10 @@
       "dest": "/api/scrapers/cron.ts"
     },
     {
+      "src": "/api/import-aitoolnet",
+      "dest": "/api/import-aitoolnet.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.ts"
     },
@@ -22,6 +26,9 @@
       "maxDuration": 60
     },
     "api/scrapers/cron.ts": {
+      "maxDuration": 300
+    },
+    "api/import-aitoolnet.ts": {
       "maxDuration": 300
     }
   },
