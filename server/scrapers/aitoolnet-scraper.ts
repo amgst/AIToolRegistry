@@ -31,8 +31,9 @@ export class AitoolnetScraper extends BaseScraper {
         return false;
       };
       
-      // For large imports (limit >= 1000), also scrape from additional pages
-      const pagesToScrape = limit >= 1000 
+      // For large imports (limit >= 100), also scrape from additional pages
+      // This helps discover more tools from different sections of the site
+      const pagesToScrape = limit >= 100 
         ? [
             url,
             "https://www.aitoolnet.com/popular",
@@ -75,10 +76,10 @@ export class AitoolnetScraper extends BaseScraper {
         }
       }
 
-      // Remove limit restriction for large imports (allow all discovered tools)
-      // If limit is very high (>= 1000), don't restrict - scrape all discovered tools
-      const candidates = limit >= 1000 
-        ? Array.from(candidateHrefs) 
+      // For large imports (limit >= 100), allow more candidates to be discovered
+      // Cap at the requested limit, but allow discovery from multiple pages
+      const candidates = limit >= 100
+        ? Array.from(candidateHrefs).slice(0, limit)
         : Array.from(candidateHrefs).slice(0, Math.max(1, Math.min(500, limit)));
 
       // Scrape detail pages concurrently
