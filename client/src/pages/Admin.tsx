@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Pencil, Trash2, Download, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Download, Loader2, RefreshCw, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminNavbar } from "@/components/AdminNavbar";
@@ -83,6 +83,12 @@ export default function Admin() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<AiTool | null>(null);
   const { toast } = useToast();
+
+  // CSV Import state
+  const [csvData, setCsvData] = useState<string>("");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvImportDryRun, setCsvImportDryRun] = useState(true);
+  const [csvImportResult, setCsvImportResult] = useState<any>(null);
 
   // Scrape & Import state
   const [scrapeUrl, setScrapeUrl] = useState<string>("https://www.aitoolnet.com/");
@@ -342,6 +348,58 @@ export default function Admin() {
   const handleIngest = (sourceId: string, dryRun = false, updateExisting = false, customLimit?: number) => {
     setIngestingSourceId(sourceId);
     ingestMutation.mutate({ sourceId, dryRun, updateExisting, customLimit });
+  };
+
+  // CSV Import mutation
+  const csvImportMutation = useMutation({
+    mutationFn: async (data: { csvData: string; dryRun: boolean }) => {
+      const res = await apiRequest("POST", "/api/tools/import-csv", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCsvImportResult(data);
+      if (!data.dryRun) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tools"] });
+        toast({ 
+          title: "CSV Import Complete", 
+          description: data.message || `Imported ${data.inserted} tools, updated ${data.updated}, skipped ${data.skipped}` 
+        });
+      } else {
+        toast({ 
+          title: "CSV Preview", 
+          description: data.message || `Would import ${data.inserted} tools, update ${data.updated}, skip ${data.skipped}` 
+        });
+      }
+    },
+    onError: (error: any) => {
+      const message = (error instanceof Error ? error.message : String(error)) || "Failed to import CSV";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        setCsvData(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    window.open("/api/tools/csv-template", "_blank");
+  };
+
+  const handleCsvImport = () => {
+    if (!csvData.trim()) {
+      toast({ title: "Error", description: "Please upload or paste CSV data", variant: "destructive" });
+      return;
+    }
+    csvImportMutation.mutate({ csvData, dryRun: csvImportDryRun });
   };
 
   // Scrape all enabled sources
@@ -867,6 +925,119 @@ export default function Admin() {
               <p>• <strong>Limit input</strong>: Enter a number (1-500) to scrape more tools in one go</p>
               <p>• <strong>Duplicate Detection</strong>: Checks both slug AND website URL to avoid duplicates</p>
               <p>• <strong>Edit</strong> link: Change the default limit for this source</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* CSV Import Section */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>CSV Import</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadTemplate}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download CSV Template
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="csv-dry-run"
+                    checked={csvImportDryRun}
+                    onCheckedChange={(checked) => setCsvImportDryRun(checked === true)}
+                  />
+                  <Label htmlFor="csv-dry-run" className="cursor-pointer">
+                    Dry Run (Preview Only)
+                  </Label>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="csv-file">Upload CSV File</Label>
+                <Input
+                  id="csv-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCsvFileUpload}
+                  className="mt-1"
+                />
+                {csvFile && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    File: {csvFile.name} ({(csvFile.size / 1024).toFixed(2)} KB)
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="csv-data">Or Paste CSV Data</Label>
+                <Textarea
+                  id="csv-data"
+                  value={csvData}
+                  onChange={(e) => setCsvData(e.target.value)}
+                  placeholder="Paste CSV data here or upload a file..."
+                  rows={10}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <Button
+                onClick={handleCsvImport}
+                disabled={csvImportMutation.isPending || !csvData.trim()}
+                className="w-full"
+              >
+                {csvImportMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {csvImportDryRun ? "Preview Import" : "Import Tools"}
+                  </>
+                )}
+              </Button>
+
+              {csvImportResult && (
+                <div className="mt-4 p-4 border rounded-lg bg-accent/50">
+                  <h4 className="font-semibold mb-2">Import Results</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Total:</span>
+                      <span className="ml-2 font-semibold">{csvImportResult.total}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Inserted:</span>
+                      <span className="ml-2 font-semibold text-green-600">{csvImportResult.inserted}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Updated:</span>
+                      <span className="ml-2 font-semibold text-blue-600">{csvImportResult.updated || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Skipped:</span>
+                      <span className="ml-2 font-semibold text-yellow-600">{csvImportResult.skipped}</span>
+                    </div>
+                  </div>
+                  {csvImportResult.errors && csvImportResult.errors.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm font-semibold text-destructive">Errors:</p>
+                      <ul className="text-sm text-destructive list-disc list-inside">
+                        {csvImportResult.errors.slice(0, 5).map((error: string, i: number) => (
+                          <li key={i}>{error}</li>
+                        ))}
+                        {csvImportResult.errors.length > 5 && (
+                          <li>... and {csvImportResult.errors.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

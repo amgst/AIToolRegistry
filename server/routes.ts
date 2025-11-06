@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertAiToolSchema } from "@shared/schema";
+import { insertAiToolSchema, type InsertAiTool } from "@shared/schema";
 import { z } from "zod";
 // Removed node-fetch import; using global fetch available in Node 18+
 import { load } from "cheerio";
@@ -710,6 +710,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error scraping all:", error);
       res.status(500).json({ error: "Failed to scrape all sources", details: String(error) });
     }
+  });
+
+  // CSV Import endpoint
+  app.post("/api/tools/import-csv", async (req, res) => {
+    try {
+      const { csvData, dryRun = false } = req.body as { csvData: string; dryRun?: boolean };
+      
+      if (!csvData || typeof csvData !== "string") {
+        return res.status(400).json({ error: "CSV data is required" });
+      }
+
+      // Parse CSV
+      const lines = csvData.split("\n").filter(line => line.trim());
+      if (lines.length < 2) {
+        return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
+      }
+
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+      const requiredFields = ["name"];
+      const missingFields = requiredFields.filter(field => !headers.includes(field));
+      
+      if (missingFields.length > 0) {
+        return res.status(400).json({ 
+          error: `Missing required fields: ${missingFields.join(", ")}` 
+        });
+      }
+
+      const results = {
+        total: lines.length - 1,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+        processed: [] as string[],
+        skippedItems: [] as Array<{ name: string; reason: string }>,
+      };
+
+      // Helper to parse CSV value (handles quoted strings)
+      const parseCsvValue = (value: string): string => {
+        value = value.trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1).replace(/""/g, '"');
+        }
+        return value;
+      };
+
+      // Helper to parse array fields (comma or semicolon separated)
+      const parseArray = (value: string): string[] => {
+        if (!value) return [];
+        return value.split(/[,;]/).map(v => parseCsvValue(v).trim()).filter(Boolean);
+      };
+
+      // Process each row
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        try {
+          // Simple CSV parsing (handles quoted values)
+          const values: string[] = [];
+          let current = "";
+          let inQuotes = false;
+          
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+            if (char === '"') {
+              if (inQuotes && line[j + 1] === '"') {
+                current += '"';
+                j++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === "," && !inQuotes) {
+              values.push(current);
+              current = "";
+            } else {
+              current += char;
+            }
+          }
+          values.push(current);
+
+          // Map values to object
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] ? parseCsvValue(values[index]) : "";
+          });
+
+          const name = row.name?.trim();
+          if (!name) {
+            results.skipped++;
+            results.skippedItems.push({ name: `Row ${i + 1}`, reason: "Missing name" });
+            continue;
+          }
+
+          // Generate slug from name if not provided
+          const slug = row.slug?.trim() || name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+
+          // Check for duplicates
+          const existing = await storage.findDuplicateTool(slug, row.websiteurl || "");
+          
+          if (existing && !dryRun) {
+            // Update existing tool
+            const updateData: Partial<InsertAiTool> = {
+              name: row.name || existing.name,
+              shortDescription: row.shortdescription || row["short description"] || existing.shortDescription,
+              description: row.description || existing.description,
+              category: row.category || existing.category || "Content AI",
+              pricing: row.pricing || existing.pricing || "Unknown",
+              websiteUrl: row.websiteurl || row["website url"] || existing.websiteUrl,
+              logoUrl: row.logourl || row["logo url"] || existing.logoUrl,
+              features: parseArray(row.features || ""),
+              tags: parseArray(row.tags || ""),
+              badge: row.badge || existing.badge,
+              rating: row.rating ? parseFloat(row.rating) : existing.rating,
+              sourceDetailUrl: row.sourcedetailurl || row["source detail url"] || existing.sourceDetailUrl || undefined,
+              developer: row.developer || existing.developer || undefined,
+              documentationUrl: row.documentationurl || row["documentation url"] || existing.documentationUrl || undefined,
+              useCases: parseArray(row.usecases || row["use cases"] || ""),
+              screenshots: parseArray(row.screenshots || ""),
+            };
+
+            await storage.updateTool(existing.id, updateData);
+            results.updated++;
+            results.processed.push(slug);
+          } else if (!existing && !dryRun) {
+            // Create new tool
+            const insertData: InsertAiTool = {
+              slug,
+              name: row.name,
+              shortDescription: row.shortdescription || row["short description"] || row.description || row.name,
+              description: row.description || row.shortdescription || row.name,
+              category: row.category || "Content AI",
+              pricing: row.pricing || "Unknown",
+              websiteUrl: row.websiteurl || row["website url"] || "",
+              logoUrl: row.logourl || row["logo url"] || undefined,
+              features: parseArray(row.features || ""),
+              tags: parseArray(row.tags || ""),
+              badge: row.badge || undefined,
+              rating: row.rating ? parseFloat(row.rating) : undefined,
+              sourceDetailUrl: row.sourcedetailurl || row["source detail url"] || undefined,
+              developer: row.developer || undefined,
+              documentationUrl: row.documentationurl || row["documentation url"] || undefined,
+              useCases: parseArray(row.usecases || row["use cases"] || ""),
+              screenshots: parseArray(row.screenshots || ""),
+            };
+
+            await storage.createTool(insertData);
+            results.inserted++;
+            results.processed.push(slug);
+          } else {
+            results.skipped++;
+            results.skippedItems.push({ name, reason: dryRun ? "Would be created/updated" : "Already exists" });
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          results.errors.push(`Row ${i + 1}: ${errorMsg}`);
+          results.skipped++;
+        }
+      }
+
+      res.json({
+        ...results,
+        dryRun,
+        message: dryRun 
+          ? `Would process ${results.total} tools (${results.inserted + results.updated} new/updated, ${results.skipped} skipped)`
+          : `Processed ${results.total} tools (${results.inserted} inserted, ${results.updated} updated, ${results.skipped} skipped)`
+      });
+    } catch (error) {
+      console.error("Error importing CSV:", error);
+      res.status(500).json({ 
+        error: "Failed to import CSV", 
+        details: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+
+  // CSV Template download endpoint
+  app.get("/api/tools/csv-template", (_req, res) => {
+    const template = `name,slug,description,short description,category,pricing,website url,logo url,features,tags,badge,rating,developer,documentation url,source detail url,use cases,screenshots
+ChatGPT,chatgpt,"AI-powered conversational assistant for text and code","AI chatbot and coding assistant",Content AI,Freemium,https://chat.openai.com/,https://openai.com/favicon.ico,"Chat,Code help,Plugins","chat,assistant,productivity",Featured,5,OpenAI,https://platform.openai.com/docs,https://openai.com/chatgpt,"Conversational AI,Code assistance,Content generation","https://example.com/screenshot1.png,https://example.com/screenshot2.png"
+Midjourney,midjourney,"AI image generation via Discord bot","Text-to-image generation",Image AI,Paid,https://www.midjourney.com/,https://www.midjourney.com/favicon.ico,"Image generation,Styles","image,art,creative",Featured,5,Midjourney Inc,https://docs.midjourney.com/,https://www.midjourney.com/,"Image creation,Art generation,Design","https://example.com/mj1.png,https://example.com/mj2.png"`;
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="ai-tools-template.csv"');
+    res.send(template);
   });
 
   // Health check endpoint to test Firebase connection
