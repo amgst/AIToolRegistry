@@ -133,7 +133,26 @@ export class DatabaseStorage implements IStorage {
     try {
       const allTools = await this.getAllTools();
       const lowerCategory = category.toLowerCase();
-      return allTools.filter(tool => tool.category.toLowerCase().includes(lowerCategory));
+      
+      // Map category filter IDs to actual category names/patterns
+      const categoryMap: Record<string, string[]> = {
+        "content": ["content", "writing", "text", "blog", "copy"],
+        "image": ["image", "photo", "picture", "art", "design", "graphic"],
+        "video": ["video", "movie", "film", "animation"],
+        "code": ["code", "developer", "programming", "coding", "software"],
+        "marketing": ["marketing", "advertising", "promotion", "social"],
+        "data": ["data", "analytics", "database", "analysis", "insight"],
+        "voice": ["voice", "audio", "speech", "sound", "speech-to-text"],
+      };
+      
+      // Get search terms for this category
+      const searchTerms = categoryMap[lowerCategory] || [lowerCategory];
+      
+      return allTools.filter(tool => {
+        const toolCategory = tool.category.toLowerCase();
+        // Check if any search term matches the category
+        return searchTerms.some(term => toolCategory.includes(term));
+      });
     } catch { return []; }
   }
 

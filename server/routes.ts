@@ -16,6 +16,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let tools;
       if (search && typeof search === "string") {
         tools = await storage.searchTools(search);
+        // If category is also provided, filter search results by category
+        if (category && typeof category === "string" && category !== "all") {
+          const categoryTools = await storage.getToolsByCategory(category);
+          const searchToolIds = new Set(tools.map(t => t.id));
+          tools = categoryTools.filter(t => searchToolIds.has(t.id));
+        }
       } else if (category && typeof category === "string" && category !== "all") {
         tools = await storage.getToolsByCategory(category);
       } else {
