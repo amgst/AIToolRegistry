@@ -33,15 +33,23 @@ export class DatabaseStorage implements IStorage {
     try {
       const { getDb } = await import("./db.js");
       const db = await getDb();
+      console.log(`📊 Fetching tools from Firestore collection: ${COLLECTION_NAME}`);
       const snapshot = await db.collection(COLLECTION_NAME).get();
       const tools: AiTool[] = [];
       snapshot.forEach((doc) => {
         tools.push(this.parseTool({ id: doc.id, ...doc.data() }));
       });
+      console.log(`✅ Loaded ${tools.length} tools from Firestore`);
       return tools;
     } catch (error) {
-      console.warn("Firestore error:", error);
-      return [];
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error("❌ Firestore error in getAllTools:", {
+        message: errorMessage,
+        stack: errorStack,
+        collection: COLLECTION_NAME,
+      });
+      throw error; // Re-throw instead of silently returning empty array
     }
   }
   

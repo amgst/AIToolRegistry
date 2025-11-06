@@ -30,9 +30,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching tools:", {
         message: errorMessage,
         stack: errorStack,
-        dbType: process.env.DATABASE_URL ? "PostgreSQL" : "SQLite",
-        hasDatabaseUrl: !!process.env.DATABASE_URL,
-        hasPostgresUrl: !!process.env.POSTGRES_URL,
       });
       
       // Return detailed error in development, graceful fallback in production
@@ -40,11 +37,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(500).json({ 
           error: "Failed to fetch tools", 
           details: errorMessage,
-          hint: "Database connection issue? Check if SQLite file exists or PostgreSQL is configured."
+          hint: "Check Firebase configuration. Visit /api/health to test connection.",
+          stack: errorStack
         });
       } else {
         // In production, return empty array to prevent app crash
         // But log the error for debugging
+        console.error("Production error - returning empty array:", errorMessage);
         res.status(200).json([]);
       }
     }
@@ -704,6 +703,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error scraping all:", error);
       res.status(500).json({ error: "Failed to scrape all sources", details: String(error) });
+    }
+  });
+
+  // Health check endpoint to test Firebase connection
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const { getDb } = await import("./db.js");
+      const db = await getDb();
+      const snapshot = await db.collection("ai_tools").limit(1).get();
+      const count = snapshot.size;
+      
+      res.json({
+        status: "ok",
+        database: "Firebase Firestore",
+        connected: true,
+        collection: "ai_tools",
+        sampleCount: count,
+        message: count > 0 ? "Database connected and contains data" : "Database connected but collection is empty"
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      res.status(500).json({
+        status: "error",
+        database: "Firebase Firestore",
+        connected: false,
+        error: errorMessage,
+        hint: "Check FIREBASE_SERVICE_ACCOUNT and FIREBASE_PROJECT_ID environment variables"
+      });
     }
   });
 

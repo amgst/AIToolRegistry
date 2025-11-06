@@ -8,6 +8,7 @@ import Home from "@/pages/Home";
 import ToolDetail from "@/pages/ToolDetail";
 import Admin from "@/pages/Admin";
 import AdminToolsList from "@/pages/AdminToolsList";
+import Health from "@/pages/Health";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/tools/:slug" component={ToolDetail} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/tools" component={AdminToolsList} />
+      <Route path="/health" component={Health} />
       <Route component={NotFound} />
     </Switch>
   );
